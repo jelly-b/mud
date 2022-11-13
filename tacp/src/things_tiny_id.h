@@ -1,19 +1,22 @@
-#ifndef THINGS_TINY_ID_H
-#define THINGS_TINY_ID_H
+#ifndef TACP_THINGS_TINY_ID_H
+#define TACP_THINGS_TINY_ID_H
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdio.h>
 
 #define SIZE_THINGS_TINY_ID 5
 
-#define TTID_ERROR_LAN_ID_OVERFLOW -1
-#define TTID_ERROR_INVALID_PASSED_TIME -2
-#define TTID_ERROR_INVALID_HOURS -3
-#define TTID_ERROR_INVALID_MINUTES -4
-#define TTID_ERROR_INVALID_SECONDS -5
-#define TTID_ERROR_INVALID_MILLISECONDS -6
-#define TTID_ERROR_NOT_ANSWER_MESSAGE_TYPE -7
+#define TINY_ID_ERROR_LAN_ID_OVERFLOW -1
+#define TINY_ID_ERROR_INVALID_PASSED_TIME -2
+#define TINY_ID_ERROR_INVALID_HOURS -3
+#define TINY_ID_ERROR_INVALID_MINUTES -4
+#define TINY_ID_ERROR_INVALID_SECONDS -5
+#define TINY_ID_ERROR_INVALID_MILLISECONDS -6
+#define TINY_ID_ERROR_NOT_ANSWER_MESSAGE_TYPE -7
+
+#define MAX_VALUE_PASSED_TIME_THIS_DAY 23 * (60 * 60 * 1000) + 23 * (60 * 1000) + 59 * 1000 + 999
+
+typedef uint8_t TinyId[SIZE_THINGS_TINY_ID];
 
 enum MessageType {
 	REQUEST = 0,
@@ -30,21 +33,20 @@ struct ThingsTinyIdModel {
 	uint16_t milliseconds;
 };
 
-int createTTIdModel(uint8_t lanId, enum MessageType messageType,
+int createTinyIdModel(uint8_t lanId, enum MessageType messageType,
 	uint32_t passedTimeThisDay, struct ThingsTinyIdModel *model);
-int makeTTIdByModel(struct ThingsTinyIdModel *model, uint8_t tTId[SIZE_THINGS_TINY_ID]);
-int makeTTId(uint8_t lanId, enum MessageType messageType, uint32_t passedTimeThisDay,
-	uint8_t tTId[SIZE_THINGS_TINY_ID]);
-bool isAnswerTTIdOf(uint8_t answerId[SIZE_THINGS_TINY_ID], uint8_t requestId[SIZE_THINGS_TINY_ID]);
-enum MessageType getMessageType(uint8_t tTId[SIZE_THINGS_TINY_ID]);
-bool isRequestTTId(uint8_t tTId[SIZE_THINGS_TINY_ID]);
-bool isResponseTTId(uint8_t tTId[SIZE_THINGS_TINY_ID]);
-bool isErrorTTId(uint8_t tTId[SIZE_THINGS_TINY_ID]);
-int getTTIdModel(uint8_t tTId[SIZE_THINGS_TINY_ID], struct ThingsTinyIdModel *model);
-uint8_t getLanIdFromTTId(uint8_t tTId[SIZE_THINGS_TINY_ID]);
-int makeAnswerTTId(uint8_t requestId[SIZE_THINGS_TINY_ID], enum MessageType messgaeType,
-	uint8_t answerId[SIZE_THINGS_TINY_ID]);
-int makeResponseTTId(uint8_t requestId[SIZE_THINGS_TINY_ID], uint8_t responseId[SIZE_THINGS_TINY_ID]);
-int makeErrorTTId(uint8_t requestId[SIZE_THINGS_TINY_ID], uint8_t errorId[SIZE_THINGS_TINY_ID]);
+int makeTinyId(uint8_t lanId, enum MessageType messageType,
+	uint32_t passedTimeThisDay, TinyId tinyId);
+int makeTinyIdByModel(struct ThingsTinyIdModel *model, TinyId tinyId);
+bool isAnswerTinyIdOf(const TinyId answerId, const TinyId requestId);
+enum MessageType getMessageTypeFromTinyId(const TinyId tinyId);
+bool isRequestTinyId(const TinyId tinyId);
+bool isResponseTinyId(const TinyId tinyId);
+bool isErrorTinyId(const TinyId tinyId);
+int getTinyIdModel(const TinyId tinyId, struct ThingsTinyIdModel *model);
+uint8_t getLanIdFromTinyId(const TinyId tinyId);
+int makeAnswerTinyId(const TinyId requestId, enum MessageType messageType, TinyId answerId);
+int makeResponseTinyId(const TinyId requestId, TinyId responseId);
+int makeErrorTinyId(const TinyId requestId, TinyId errorId);
 
 #endif

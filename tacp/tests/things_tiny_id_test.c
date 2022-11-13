@@ -19,17 +19,17 @@ void test_things_tiny_id(void) {
 		52 * 1000 +
 		997;
 
-	uint8_t requestId[SIZE_THINGS_TINY_ID] = {0};
-	if (makeTTId(lanId, REQUEST, passedTimeThisDay, requestId) != 0)
+	TinyId requestId = {0};
+	if (makeTinyId(lanId, REQUEST, passedTimeThisDay, requestId) != 0)
 		TEST_FAIL_MESSAGE("Failed to create things tiny ID.");
 
-	uint8_t responseId[SIZE_THINGS_TINY_ID] = {0};
-	if (makeResponseTTId(requestId, responseId) != 0)
-		TEST_FAIL_MESSAGE("Failed to make response things tiny ID.");
+	TinyId responseId = {0};
+	TEST_ASSERT_EQUAL_INT_MESSAGE(0, makeResponseTinyId(requestId, responseId),
+		"Failed to make response things tiny ID.");
 
 	struct ThingsTinyIdModel responseModel;
-	if (getTTIdModel(responseId, &responseModel) != 0)
-		TEST_FAIL_MESSAGE("Failed to get things tiny ID model.");
+	TEST_ASSERT_EQUAL_INT_MESSAGE(0, getTinyIdModel(responseId, &responseModel),
+		"Failed to get things tiny ID model.");
 
 	TEST_ASSERT_EQUAL_UINT8(lanId, responseModel.lanId);
 	TEST_ASSERT_EQUAL_UINT(RESPONSE, responseModel.messageType);
@@ -38,13 +38,16 @@ void test_things_tiny_id(void) {
 	TEST_ASSERT_EQUAL_UINT8(seconds, responseModel.seconds);
 	TEST_ASSERT_EQUAL_UINT16(milliseconds, responseModel.milliseconds);
 
-	uint8_t errorId[SIZE_THINGS_TINY_ID] = {0};
-	if(makeErrorTTId(requestId, errorId) != 0)
+	TinyId errorId = {0};
+	if(makeErrorTinyId(requestId, errorId) != 0)
 		TEST_FAIL_MESSAGE("Failed to make error things tiny ID.");
 
+	TEST_ASSERT_EQUAL_UINT8(lanId, getLanIdFromTinyId(errorId));
+	TEST_ASSERT_EQUAL_UINT(ERROR, getMessageTypeFromTinyId(errorId));
+
 	struct ThingsTinyIdModel errorModel;
-	if(getTTIdModel(errorId, &errorModel) != 0)
-		TEST_FAIL_MESSAGE("Failed to get things tiny ID model.");
+	TEST_ASSERT_EQUAL_INT_MESSAGE(0, getTinyIdModel(errorId, &errorModel),
+		"Failed to get things tiny ID model.");
 
 	TEST_ASSERT_EQUAL_UINT(ERROR, errorModel.messageType);
 }
