@@ -79,42 +79,78 @@ int processChangeMode(void *domain) {
 	TEST_FAIL_MESSAGE("The program shouldn't run to here.");
 }
 
-void setUp() {
-	actionProcessingStage = NONE;
-
-	uint8_t flashProtocolName[2] = {0xf7, 0x01};
-	struct ProtocolAttributeDescription flashProtocolAttributes[] = {
+void registerInboundProtocols() {
+	ProtocolName flashProtocolName ={
+		{0xf7,0x01},
+		0x00
+	};
+	ProtocolAttributeDescription flashProtocolAttributes[] = {
 		{
 			PROTOCOL_FLASH_ATTRIBUTE_REPEAT,
 			0x01,
 			TYPE_INT
 		}
 	};
-	struct ProtocolDescription pdFlash =
-		createProtocolDescription(PROTOCOL_FLASH, flashProtocolName, flashProtocolAttributes);
+
+	ProtocolDescription pdFlash =
+		createProtocolDescription(PROTOCOL_FLASH, flashProtocolName, flashProtocolAttributes, 1);
 
 	registerInboundProtocol(pdFlash, assembleFlash, processFlash);
 
-	uint8_t changeModeProtocolName[2] = {0xf7, 0x00};
-	struct ProtocolAttributeDescription changeModeProtocolAttributes[] ={
+	ProtocolName changeModeProtocolName = {
+		{0xf7, 0x00},
+		0x00
+	};
+	ProtocolAttributeDescription changeModeProtocolAttributes[] = {
 		{
 			PROTOCOL_CHANGE_MODE_ATTRIBUTE_MODE,
 			0x01,
 			TYPE_STRING
 		}
 	};
-	struct ProtocolDescription pdChangeMode =
+	ProtocolDescription pdChangeMode =
 		createProtocolDescription(PROTOCOL_CHANGE_MODE, changeModeProtocolName,
-			changeModeProtocolAttributes);
+			changeModeProtocolAttributes, 1);
 
 	registerInboundProtocol(pdChangeMode, assembleChangeMode, processChangeMode);
 }
 
-void tearDown() {
-	actionProcessingStage = NONE;
+void unregisterInboundProtocols() {
+	unregisterInboundProtocol(PROTOCOL_CHANGE_MODE);
+	unregisterInboundProtocol(PROTOCOL_FLASH);
 }
 
-void test_dac_protocols(void) {
+void setUp() {
+	registerTacpLoraProtocols();
+	registerInboundProtocols();
+
+	actionProcessingStage = NONE;
+
+
+}
+
+void tearDown() {
+	actionProcessingStage = NONE;
+
+	unregisterInboundProtocols();
+	unregisterTacpLoraProtocols();
+}
+
+void test_lora_dac_protocols(void) {
+	uint8_t allocationData[] ={
+		0xff,
+			0xf8, 0x05, 0x04, 0x06, 0x00,
+				0x05, 0x06, 0x05, 0x05, 0x03, 0x03, 0xfe,
+				0x06, 0x02, 0x03, 0xfe,
+				0x07, 0x06, 0x05, 0x05, 0x03, 0x03, 0xfe,
+				0x08, 0x02, 0x03, 0xfe,
+				0x09, 0x01, 0xfe,
+				0x0a, 0x02, 0x03, 0xfe,
+		0xff
+	};
+
+	ProtocolData pData = CREATE_PROTOCOL_DATA(allocationData);
+	// TEST_ASSERT_EQUAL_INT(0, parseProtocol(pData, &allocation));
 
 }
 
@@ -123,7 +159,7 @@ void test_registered_action_protocols(void) {
 	uint8_t flashData[] ={
 		0xff,
 			0xf7, 0x01, 0x00, 0x01, 0x00,
-				0x01, 0x05,
+				0x01, 0x05, 0xfe,
 		0xff
 	};
 
@@ -136,7 +172,7 @@ void test_registered_action_protocols(void) {
 		0xff,
 			0xf8, 0x03, 0x05, 0x00, 0x01,
 				0xf7, 0x00, 0x00, 0x01, 0x00,
-					0x01, 0x42,
+					0x01, 0x42, 0xfe,
 		0xff
 	};
 
@@ -147,7 +183,7 @@ void test_registered_action_protocols(void) {
 int main() {
 	UNITY_BEGIN();
 	
-	RUN_TEST(test_dac_protocols);
+	RUN_TEST(test_lora_dac_protocols);
 	RUN_TEST(test_registered_action_protocols);
 	
 	return UNITY_END();

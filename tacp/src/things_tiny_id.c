@@ -2,8 +2,8 @@
 
 #include "things_tiny_id.h"
 
-int createTinyIdModel(uint8_t lanId, enum MessageType messageType,
-		uint32_t passedTimeThisDay, struct ThingsTinyIdModel *model) {
+int createTinyIdModel(uint8_t lanId, MessageType messageType,
+		uint32_t passedTimeThisDay, ThingsTinyIdModel *model) {
 	if (lanId > 255)
 		return TINY_ID_ERROR_LAN_ID_OVERFLOW;
 
@@ -32,7 +32,7 @@ int createTinyIdModel(uint8_t lanId, enum MessageType messageType,
 	return 0;
 }
 
-int makeTinyId(uint8_t lanId, enum MessageType messageType,
+int makeTinyId(uint8_t lanId, MessageType messageType,
 			uint32_t passedTimeThisDay, TinyId tinyId) {
 	struct ThingsTinyIdModel model;
 	int retValue = createTinyIdModel(lanId, messageType, passedTimeThisDay, &model);
@@ -42,7 +42,7 @@ int makeTinyId(uint8_t lanId, enum MessageType messageType,
 	return makeTinyIdByModel(&model, tinyId);
 }
 
-int makeTinyIdByModel(struct ThingsTinyIdModel *model, TinyId tinyId) {
+int makeTinyIdByModel(ThingsTinyIdModel *model, TinyId tinyId) {
 	if (model->lanId < 0 || model->lanId > 255)
 		return TINY_ID_ERROR_LAN_ID_OVERFLOW;
 
@@ -115,7 +115,7 @@ bool isErrorTinyId(const TinyId tinyId) {
 	return getMessageTypeFromTinyId(tinyId) == ERROR;
 }
 
-int getTinyIdModel(const TinyId tinyId, struct ThingsTinyIdModel *model) {
+int getTinyIdModel(const TinyId tinyId, ThingsTinyIdModel *model) {
 	model->lanId = tinyId[0];
 	model->messageType = getMessageTypeFromTinyId(tinyId);
 	model->hours = tinyId[1] & 0X3f;
@@ -131,7 +131,7 @@ uint8_t getLanIdFromTinyId(const TinyId tinyId) {
 	return tinyId[0];
 }
 
-int makeAnswerTinyId(const TinyId requestId, enum MessageType messageType, TinyId answerId) {
+int makeAnswerTinyId(const TinyId requestId, MessageType messageType, TinyId answerId) {
 	if (messageType == REQUEST)
 		return TINY_ID_ERROR_NOT_ANSWER_MESSAGE_TYPE;
 
