@@ -1,5 +1,5 @@
-#ifndef TACP_THINGS_TINY_ID_H
-#define TACP_THINGS_TINY_ID_H
+#ifndef MUD_THINGS_TINY_ID_H
+#define MUD_THINGS_TINY_ID_H
 
 #include <stdint.h>
 #include <stdbool.h>

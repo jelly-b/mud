@@ -1,17 +1,15 @@
-#ifndef TACP_PROTOCOLS_H
-#define TACP_PROTOCOLS_H
-
-#define TACP_NOT_VALID_PROTOCOL -1
-#define TACP_UNKNOWN_PROTOCOL_NAME -2
-
-#define DATA_SIZE(data) sizeof(data) / sizeof(uint8_t)
-#define CREATE_PROTOCOL_DATA(data) {data, DATA_SIZE(data)}
+#ifndef MUD_PROTOCOLS_H
+#define MUD_PROTOCOLS_H
 
 #include <stdint.h>
 #include <stdbool.h>
 
+#define DATA_SIZE(data) sizeof(data) / sizeof(uint8_t)
+#define ARRAY_SIZE(array) sizeof(array) / sizeof(array[0])
+#define CREATE_PROTOCOL_DATA(data) {data, DATA_SIZE(data)}
+
 typedef enum DataType {
-	TYPE_BOOL,
+	TYPE_BYTE,
 	TYPE_INT,
 	TYPE_FLOAT,
 	TYPE_STRING
@@ -31,14 +29,10 @@ typedef struct ProtocolName {
 typedef struct ProtocolDescription {
 	uint8_t mnemomic;
 	ProtocolName name;
-	uint8_t attributesSize;
 	ProtocolAttributeDescription *attributes;
+	uint8_t attributesSize;
+	bool acceptText;
 } ProtocolDescription;
-
-typedef struct ProtocolRegistration {
-	ProtocolName name;
-	ProtocolDescription description;
-} ProtocolRegistration;
 
 typedef struct ProtocolAttribute {
 	uint8_t mnemonic;
@@ -58,20 +52,6 @@ typedef struct ProtocolData {
 } ProtocolData;
 
 ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName name,
-	ProtocolAttributeDescription attributes[], int attributeSize);
-void registerInboundProtocol(ProtocolDescription protocolDescription);
-bool unregisterInboundProtocol(uint8_t mnemomic);
-
-uint8_t getProtocolMnemonic(ProtocolData pData);
-bool isProtocol(ProtocolData pData, uint8_t mnemonic);
-int parseProtocol(ProtocolData pData, Protocol *protocol);
-void freeProtocolAttributeValues(Protocol *protocol);
-int translateProtocol(Protocol *protocol, uint8_t *data);
-
-bool getAttributeValueAsBool(Protocol *protocol, uint8_t mnemonic, bool *value);
-bool getAttributeValueAsInt(Protocol *protocol, uint8_t mnemonic, int *value);
-char *getAttributeValueAsString(Protocol *protocol, uint8_t mnemonic);
-bool getAttributeValueAsFloat(Protocol *protocol, uint8_t mnemonic, float *value);
-char *getText(Protocol *protocol);
+	ProtocolAttributeDescription attributes[], int attributeSize, bool acceptText);
 
 #endif

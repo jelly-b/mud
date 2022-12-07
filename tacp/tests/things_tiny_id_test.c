@@ -6,7 +6,7 @@ void setUp() {}
 
 void tearDown() {}
 
-void test_things_tiny_id(void) {
+void testThingsTinyId(void) {
 	uint8_t lanId = 24;
 	uint8_t hours = 11;
 	uint8_t minutes = 23;
@@ -55,7 +55,7 @@ void test_things_tiny_id(void) {
 int main() {
 	UNITY_BEGIN();
 	
-	RUN_TEST(test_things_tiny_id);
+	RUN_TEST(testThingsTinyId);
 	
 	return UNITY_END();
 }
