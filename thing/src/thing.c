@@ -14,23 +14,23 @@ void registerResetter(void (*_reset)()) {
 	reset = _reset;
 }
 
-void registerTimer(void (*_schedule)(int, void (*)())) {
+void registerTimer(void (*_schedule)(int delay,void (*doTask)())) {
 	schedule = _schedule;
 }
 
-void registerRadioConfigurer(void (*_configureRadio)(uint8_t[])) {
+void registerRadioConfigurer(void (*_configureRadio)(uint8_t address[])) {
 	configureRadio = _configureRadio;
 }
 
-void registerRadioAddressChanger(void (*_changeRadioAddress)(uint8_t[])) {
+void registerRadioAddressChanger(void (*_changeRadioAddress)(uint8_t address[])) {
 	changeRadioAddress = _changeRadioAddress;
 }
 
-void registerThingInfoLoader(void (*_loadThingInfo)(ThingInfo *)) {
+void registerThingInfoLoader(void (*_loadThingInfo)(ThingInfo *thingInfo)) {
 	loadThingInfo = _loadThingInfo;
 }
 
-void registerThingInfoSaver(void (*_saveThingInfo)(ThingInfo *)) {
+void registerThingInfoSaver(void (*_saveThingInfo)()) {
 	saveThingInfo = _saveThingInfo;
 }
 
@@ -38,7 +38,7 @@ void registerProtocolsConfigurer(void (*_configureProtocols)()) {
 	configureProtocols = _configureProtocols;
 }
 
-void registerRadioSender(void (*_send)(uint8_t[], uint8_t[], int)) {
+void registerRadioSender(void (*_send)(uint8_t address[], uint8_t data[], int dataSize)) {
 	send = _send;
 }
 
@@ -50,23 +50,56 @@ bool unregisterActionProtocol(uint8_t mnemomic) {
 	unregisterInboundProtocol(mnemomic);
 }
 
-void registerDacProtocols() {}
+void unregisterThingHooks() {
+	reset = NULL;
+	schedule = NULL;
+	configureRadio = NULL;
+	changeRadioAddress = NULL;
+	loadThingInfo = NULL;
+	saveThingInfo = NULL;
+	configureProtocols = NULL;
+	send = NULL;
+}
 
-void introduceMe(char *thingId, int thingIdSize) {
+void registerLoraDacIntroductionProtocol() {
+	ProtocolAttributeDescription padIntroductionThingId = {
+		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_THING_ID, 0x01, TYPE_STRING};
+	ProtocolAttributeDescription padIntroductionAddress = {
+		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x02, TYPE_BYTES};
+
+	ProtocolName pNIntrodction ={{0xf8, 0x05}, 0x00};
+	ProtocolAttributeDescription padsIntroduction[] = {padIntroductionThingId, padIntroductionAddress};
+	ProtocolDescription pDIntroduction = createProtocolDescription(TACP_PROTOCOL_INTRODUCTION,
+		pNIntrodction, padsIntroduction, 2, false);
+
+	registerOutboundProtocol(pDIntroduction);
+}
+
+void registerLoraDacProtocols() {
+	registerLoraDacIntroductionProtocol();
+}
+
+void introduce(char *thingId, int thingIdSize) {
 	Protocol introduction;
-	introduction.mnemonic = PROTOCOL_INTRODUCTION;
+	introduction.mnemonic = TACP_PROTOCOL_INTRODUCTION;
 	introduction.attributesSize = 2;
 	introduction.attributes = malloc(sizeof(ProtocolAttribute) * 2);
 	
-	introduction.attributes->mnemonic = PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS;
-	int *address = malloc(sizeof(int));
-	*address = 0xff * 0xff + 0xfd;
-	introduction.attributes->value = address;
+	uint8_t aAddress[] ={0xef, 0xee, 0x1f};
+	int result = createProtocolBytesAttribute(TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
+		aAddress, 3, introduction.attributes);
+	if (result != 0)
+		return result;
 
-	introduction.attributes->mnemonic = PROTOCOL_INTRODUCTION_ATTRIBUTE_CHANNEL;
-	int *channel = malloc(sizeof(int));
-	*channel = 0x31;
-	introduction.attributes->value = address;
+	result = createProtocolStringAttribute(TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_THING_ID,
+		thingId,thingIdSize,introduction.attributes + 1);
+	if (result != 0)
+		return result;
+	
+	ProtocolData pData;
+	translateProtocol(&introduction, &pData);
+	uint8_t aDacServiceAddress[] = {0xef, 0xef, 0x1f};
+	send(aDacServiceAddress, pData.data, pData.dataSize);
 }
 
 int toBeAThing() {
@@ -74,10 +107,15 @@ int toBeAThing() {
 	loadThingInfo(&thingInfo);
 
 	if (thingInfo.dacState == INITIAL) {
-		configureRadio(NULL);
+		uint8_t initialAddress[] = {0xef, 0xee, 0x1f};
+		configureRadio(initialAddress);
 
-		registerDacProtocols();
-		introduceMe();
+		registerLoraDacProtocols();
+		introduce(&(thingInfo.thingId), thingInfo.thingIdSize);
+
+		return 0;
+	} else {
+		return -1;
 	}
 }
 

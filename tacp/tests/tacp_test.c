@@ -77,7 +77,7 @@ void testParseInboundProtocols(void) {
 	};
 
 	ProtocolData flashPData = CREATE_PROTOCOL_DATA(flashData);
-	TEST_ASSERT_TRUE(isProtocol(flashPData, PROTOCOL_FLASH));
+	TEST_ASSERT_TRUE(isInboundProtocol(flashPData, PROTOCOL_FLASH));
 
 	Protocol flashProtocol;
 	TEST_ASSERT_EQUAL_INT(0, parseProtocol(flashPData, &flashProtocol));
@@ -101,7 +101,7 @@ void testParseInboundProtocols(void) {
 	};
 
 	ProtocolData introductionPData = CREATE_PROTOCOL_DATA(introductionData);
-	TEST_ASSERT_TRUE(isProtocol(introductionPData, PROTOCOL_INTRODUCTION));
+	TEST_ASSERT_TRUE(isInboundProtocol(introductionPData, PROTOCOL_INTRODUCTION));
 
 	Protocol introductionProtocol;
 	TEST_ASSERT_EQUAL_INT(0, parseProtocol(introductionPData, &introductionProtocol));

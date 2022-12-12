@@ -10,6 +10,7 @@
 
 typedef enum DataType {
 	TYPE_BYTE,
+	TYPE_BYTES,
 	TYPE_INT,
 	TYPE_FLOAT,
 	TYPE_STRING
@@ -34,9 +35,17 @@ typedef struct ProtocolDescription {
 	bool acceptText;
 } ProtocolDescription;
 
+typedef union ProtocolAttributeValue {
+	int iValue;
+	float fValue;
+	uint8_t bValue;
+	uint8_t *bsValue;
+	char *sValue;
+} ProtocolAttributeValue;
+
 typedef struct ProtocolAttribute {
 	uint8_t mnemonic;
-	void *value;
+	ProtocolAttributeValue value;
 } ProtocolAttribute;
 
 typedef struct Protocol {

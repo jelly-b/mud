@@ -4,7 +4,6 @@ add_library(tacp STATIC
 	things_tiny_id.h
 	things_tiny_id.c
 	protocols.h
-	protocols.c
 	tacp.h
 	tacp.c
 )
