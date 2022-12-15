@@ -29,29 +29,31 @@ void copyInboundProtocolRegistration(InboundProtocolRegistration *dest,
 	dest->processDomain = src->processDomain;
 }
 
-int createProtocolBytesAttribute(uint8_t mnemonic, uint8_t bytes[], int size,
-			ProtocolAttribute *attribute) {
+int createProtocolBytesAttribute(ProtocolAttribute *attribute, uint8_t mnemonic,
+			uint8_t bytes[], int size) {
 	if(size > MAX_ATTRIBUTE_DATA_SIZE)
 		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 	attribute->mnemonic = mnemonic;
-	attribute->value.bsValue = malloc((size + 1) * sizeof(uint8_t));
+	attribute->dataType = TYPE_BYTES;
+	attribute->value.bsValue = (uint8_t *)malloc((size + 1) * sizeof(uint8_t));
 
 	if (!attribute->value.bsValue)
 		return TACP_ERROR_OUT_OF_MEMEORY;
 
-	attribute->value.bsValue = (uint8_t)size;
+	*(attribute->value.bsValue) = (uint8_t)size;
 	memcpy(attribute->value.bsValue + 1, bytes, size);
 
 	return 0;
 }
 
-int createProtocolStringAttribute(uint8_t mnemonic, char string[], ProtocolAttribute *attribute) {
+int createProtocolStringAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, char string[]) {
 	int length = strlen(string);
 	if(length > MAX_ATTRIBUTE_DATA_SIZE)
 		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 	attribute->mnemonic = mnemonic;
+	attribute->dataType = TYPE_STRING;
 	attribute->value.sValue = malloc((strlen(string) + 1) * sizeof(char));
 
 	if(!attribute->value.sValue)
@@ -60,6 +62,32 @@ int createProtocolStringAttribute(uint8_t mnemonic, char string[], ProtocolAttri
 	strcpy(attribute->value.sValue, string);
 
 	return 0;
+}
+
+void createProtocolByteAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, uint8_t bValue) {
+	attribute->mnemonic = mnemonic;
+	attribute->dataType = TYPE_BYTE;
+	attribute->value.bValue = bValue;
+}
+
+void createProtocolIntAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, int iValue) {
+	attribute->mnemonic = mnemonic;
+	attribute->dataType = TYPE_INT;
+	attribute->value.iValue = iValue;
+}
+
+void createProtocolFloatAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, float fValue) {
+	attribute->mnemonic = mnemonic;
+	attribute->dataType = TYPE_FLOAT;
+	attribute->value.fValue = fValue;
+}
+
+int createProtocolText(Protocol *protocol, char *text) {
+	protocol->text = (char *)malloc(strlen(text) + 1);
+	if (!protocol->text)
+		return TACP_ERROR_OUT_OF_MEMEORY;
+
+	strcpy(protocol->text, text);
 }
 
 ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName name,
@@ -242,13 +270,13 @@ int escape(uint8_t data[], int size, ProtocolData *pData) {
 		pData->data[1] = pData->data[0];
 		pData->data[0] = FLAG_NOREPLACE;
 		pData->dataSize = 2;
-	}
-
-	if(position == 2) {
+	} else if(position == 2) {
 		pData->data[2] = pData->data[1];
 		pData->data[1] = pData->data[0];
 		pData->data[0] = FLAG_NOREPLACE;
 		pData->dataSize = 3;
+	} else {
+		pData->dataSize = position;
 	}
 
 	return 0;
@@ -546,8 +574,21 @@ int8_t parseProtocol(ProtocolData pData, Protocol *protocol) {
 }
 
 void releaseProtocolResources(Protocol *protocol) {
-	if (protocol->attributesSize != 0 || protocol->attributes)
+	if (protocol->attributesSize != 0 || protocol->attributes) {
+		for (int i = 0; i < protocol->attributesSize; i++) {
+			if ((protocol->attributes + i)->dataType == TYPE_BYTES &&
+					(protocol->attributes + i)->value.bsValue != NULL) {
+				free((protocol->attributes + i)->value.bsValue);
+			} else if ((protocol->attributes + i)->dataType == TYPE_STRING &&
+					(protocol->attributes + i)->value.sValue != NULL) {
+				free((protocol->attributes + i)->value.sValue);
+			} else {
+				// NOOP
+			}
+		}
+
 		free(protocol->attributes);
+	}
 
 	protocol->attributes = NULL;
 	protocol->attributesSize = 0;
@@ -555,6 +596,14 @@ void releaseProtocolResources(Protocol *protocol) {
 	if(protocol->text) {
 		free(protocol->text);
 		protocol->text = NULL;
+	}
+}
+
+void releaseProtocolData(ProtocolData *pData) {
+	if (pData->dataSize != 0 && pData->data != NULL) {
+		free(pData->data);
+		pData->data = NULL;
+		pData->dataSize = 0;
 	}
 }
 
@@ -613,14 +662,14 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		} else if (attributeDescription->dataType == TYPE_INT) {
 			uint8_t aData[32];
 			sprintf(aData, "%d", attribute->value.iValue);
-			escapeResult = escape(aData,strlen(aData), &attributeData);
+			escapeResult = escape(aData, strlen(aData), &attributeData);
 		} else if (attributeDescription->dataType == TYPE_FLOAT) {
 			uint8_t aData[32];
 			sprintf(aData, "%f", attribute->value.fValue);
 			escapeResult = escape(aData, strlen(aData), &attributeData);
 		} else if (attributeDescription->dataType == TYPE_BYTES) {
 			int bsSize = attribute->value.bsValue[0];
-			escapeResult = escape(attribute->value.bsValue[1], bsSize, &attributeData);
+			escapeResult = escape(attribute->value.bsValue + 1, bsSize, &attributeData);
 		} else { // attributeDescription->dataType == TYPE_STRING
 			escapeResult = escape(attribute->value.sValue, strlen(attribute->value.sValue), &attributeData);
 		}
@@ -648,7 +697,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
 
-		memcpy(buff[position], attributeData.data, attributeData.dataSize);
+		memcpy(buff + position, attributeData.data, attributeData.dataSize);
 		position += attributeData.dataSize;
 
 		buff[position] = FLAG_UNIT_SPLITTER;
@@ -660,7 +709,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		}
 	}
 
-	if (attributeData.data != NULL)
+	if (attributeData.dataSize != 0 && attributeData.data != NULL)
 		free(attributeData.data);
 
 	if (protocol->text) {
@@ -668,26 +717,29 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		if (position + textSize >= MAX_PROTOCOL_DATA_SIZE - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
-		memcpy(buff[position], protocol->text, textSize);
+		memcpy(buff + position, protocol->text, textSize);
 		position += textSize;
 	}
 
-	if (buff[position] == FLAG_UNIT_SPLITTER) {
-		buff[position] = FLAG_DOC_BEGINNING_END;
+	if (buff[position - 1] == FLAG_UNIT_SPLITTER) {
+		buff[position - 1] = FLAG_DOC_BEGINNING_END;
 	} else {
-		if (position + 1 >= MAX_PROTOCOL_DATA_SIZE - 1)
+		if (position >= MAX_PROTOCOL_DATA_SIZE - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
-		buff[position + 1] = FLAG_DOC_BEGINNING_END;
-		position++;
+		buff[position] = FLAG_DOC_BEGINNING_END;
 	}
 
-	pData->data = malloc((position + 1) * sizeof(uint8_t));
+	pData->data = NULL;
+	pData->dataSize = 0;
+
+	int dataSize = position + 1;
+	pData->data = malloc(dataSize * sizeof(uint8_t));
 	if (!pData->data)
 		return TACP_ERROR_OUT_OF_MEMEORY;
 
-	memcpy(pData->data, buff, position + 1);
-	pData->dataSize = position + 1;
+	memcpy(pData->data, buff, dataSize);
+	pData->dataSize = dataSize;
 
 	return 0;
 }

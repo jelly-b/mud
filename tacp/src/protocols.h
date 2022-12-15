@@ -45,6 +45,7 @@ typedef union ProtocolAttributeValue {
 
 typedef struct ProtocolAttribute {
 	uint8_t mnemonic;
+	DataType dataType;
 	ProtocolAttributeValue value;
 } ProtocolAttribute;
 

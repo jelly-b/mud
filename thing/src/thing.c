@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "tacp.h"
 #include "thing.h"
 
@@ -9,6 +11,8 @@ static void (*loadThingInfo)(ThingInfo *) = NULL;
 static void (*saveThingInfo)(ThingInfo *) = NULL;
 static void (*configureProtocols)() = NULL;
 static void (*send)(uint8_t[], uint8_t[], int) = NULL;
+
+static DacState dacState = INITIAL;
 
 void registerResetter(void (*_reset)()) {
 	reset = _reset;
@@ -62,13 +66,11 @@ void unregisterThingHooks() {
 }
 
 void registerLoraDacIntroductionProtocol() {
-	ProtocolAttributeDescription padIntroductionThingId = {
-		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_THING_ID, 0x01, TYPE_STRING};
 	ProtocolAttributeDescription padIntroductionAddress = {
 		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x02, TYPE_BYTES};
 
 	ProtocolName pNIntrodction ={{0xf8, 0x05}, 0x00};
-	ProtocolAttributeDescription padsIntroduction[] = {padIntroductionThingId, padIntroductionAddress};
+	ProtocolAttributeDescription padsIntroduction[] = {padIntroductionAddress};
 	ProtocolDescription pDIntroduction = createProtocolDescription(TACP_PROTOCOL_INTRODUCTION,
 		pNIntrodction, padsIntroduction, 2, false);
 
@@ -79,39 +81,50 @@ void registerLoraDacProtocols() {
 	registerLoraDacIntroductionProtocol();
 }
 
-void introduce(char *thingId, int thingIdSize) {
+int introduce(char *thingId, int thingIdSize) {
 	Protocol introduction;
 	introduction.mnemonic = TACP_PROTOCOL_INTRODUCTION;
-	introduction.attributesSize = 2;
-	introduction.attributes = malloc(sizeof(ProtocolAttribute) * 2);
+	introduction.attributesSize = 1;
+	introduction.attributes = (ProtocolAttribute *)malloc(sizeof(ProtocolAttribute) * 1);
+
+	if (!introduction.attributes)
+		return TACP_ERROR_OUT_OF_MEMEORY;
 	
 	uint8_t aAddress[] ={0xef, 0xee, 0x1f};
-	int result = createProtocolBytesAttribute(TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
-		aAddress, 3, introduction.attributes);
+	int result = createProtocolBytesAttribute(introduction.attributes,
+		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, aAddress, 3);
 	if (result != 0)
 		return result;
 
-	result = createProtocolStringAttribute(TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_THING_ID,
-		thingId,thingIdSize,introduction.attributes + 1);
-	if (result != 0)
-		return result;
+	createProtocolText(&introduction, thingId);
 	
 	ProtocolData pData;
 	translateProtocol(&introduction, &pData);
+	releaseProtocolResources(&introduction);
+
 	uint8_t aDacServiceAddress[] = {0xef, 0xef, 0x1f};
 	send(aDacServiceAddress, pData.data, pData.dataSize);
+
+	releaseProtocolData(&pData);
+
+	return 0;
 }
 
 int toBeAThing() {
 	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);
 
-	if (thingInfo.dacState == INITIAL) {
+	dacState = thingInfo.dacState;
+	if (dacState == INITIAL) {
 		uint8_t initialAddress[] = {0xef, 0xee, 0x1f};
 		configureRadio(initialAddress);
 
 		registerLoraDacProtocols();
-		introduce(&(thingInfo.thingId), thingInfo.thingIdSize);
+		int result = introduce(thingInfo.thingId, thingInfo.thingIdSize);
+		if (result != 0)
+			return result;
+
+		dacState = INTRODUCTING;
 
 		return 0;
 	} else {

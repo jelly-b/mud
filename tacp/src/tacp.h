@@ -42,13 +42,15 @@ typedef struct InboundProtocolRegistration {
 
 enum TacpProtocolsMnemonic {
 	TACP_PROTOCOL_INTRODUCTION = 200,
-	TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_THING_ID,
 	TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS
 };
 
-int createProtocolBytesAttribute(uint8_t mnemonic, uint8_t bytes[], int size,
-	ProtocolAttribute *attribute);
-int createProtocolStringAttribute(uint8_t mnemonic, char string[], ProtocolAttribute *attribute);
+void createProtocolIntAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, int iValue);
+void createProtocolFloatAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, float fValue);
+void createProtocolByteAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, uint8_t bValue);
+int createProtocolBytesAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, uint8_t bytes[], int size);
+int createProtocolStringAttribute(ProtocolAttribute *attribute, uint8_t mnemonic, char string[]);
+int createProtocolText(Protocol *protocol, char *text);
 
 void registerInboundProtocol(ProtocolDescription protocolDescription,
 	uint8_t (*assembleDomain)(Protocol *, void *), uint8_t (*processDomain)(void *));
@@ -60,6 +62,7 @@ uint8_t getProtocolMnemonic(ProtocolData pData);
 bool isInboundProtocol(ProtocolData pData, uint8_t mnemonic);
 int8_t parseProtocol(ProtocolData pData, Protocol *protocol);
 void releaseProtocolResources(Protocol *protocol);
+void releaseProtocolResources(ProtocolData *pData);
 int translateProtocol(Protocol *protocol, ProtocolData *pData);
 
 bool getAttributeValueAsInt(Protocol *protocol, uint8_t mnemonic, int *value);

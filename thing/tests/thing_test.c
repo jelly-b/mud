@@ -2,8 +2,9 @@
 
 #include "thing.h"
 
-static ThingInfo thingInfoInStorage = {16, "SL-LE01-EA41B9F8", INITIAL, NULL, NULL, NULL};
+static ThingInfo thingInfoInStorage = {16, "SL-LE01-C980AFE9", INITIAL, NULL, NULL, NULL};
 static int resetTimes = 0;
+static DacState dacState = INITIAL;
 
 void reset() {
 	TEST_ASSERT_EQUAL_INT(0, 1 - 1);
@@ -17,6 +18,7 @@ void changeRadioAddress(uint8_t address[]) {}
 void loadThingInfo(ThingInfo *thingInfo) {
 	thingInfo->thingId = thingInfoInStorage.thingId;
 	thingInfo->thingIdSize = thingInfoInStorage.thingIdSize;
+	thingInfo->dacState = thingInfoInStorage.dacState;
 	thingInfo->address = thingInfoInStorage.address;
 	thingInfo->gatewayUplinkAddress = thingInfoInStorage.gatewayUplinkAddress;
 	thingInfo->gatewayDownlinkAddress = thingInfoInStorage.gatewayDownlinkAddress;
@@ -32,7 +34,22 @@ void saveThingInfo(ThingInfo *thingInfo) {
 
 void configureProtocols() {}
 
-void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {}
+void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
+	if (dacState == INITIAL) {
+		uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
+		TEST_ASSERT_EQUAL_UINT8_ARRAY(dacServiceAddress, address, 3);
+
+		TEST_ASSERT_EQUAL_INT(29, dataSize);
+		uint8_t introductionData[] = {
+			0xff,
+				0xf8, 0x05, 0x00, 0x01, 0x80,
+					0x02, 0xfb, 0xef, 0xee, 0x1f, 0xfe,
+					0x53, 0x4c, 0x2d, 0x4c, 0x45, 0x30, 0x31, 0x2d, 0x43, 0x39, 0x38, 0x30, 0x41, 0x46, 0x45, 0x39,
+			0xff
+		};
+		TEST_ASSERT_EQUAL_UINT8_ARRAY(introductionData, data, dataSize);
+	}
+}
 
 void sendToGatewayMock2(uint8_t address[], uint8_t data[], int dataSize) {}
 

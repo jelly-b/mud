@@ -9,6 +9,8 @@
 
 typedef enum DacState {
 	INITIAL,
+	INTRODUCTING,
+	ALLOCATING,
 	ALLOCATED,
 	CONFIGURED
 } DacState;
