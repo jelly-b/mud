@@ -44,15 +44,16 @@ typedef union ProtocolAttributeValue {
 } ProtocolAttributeValue;
 
 typedef struct ProtocolAttribute {
+	struct ProtocolAttribute *previous;
 	uint8_t mnemonic;
 	DataType dataType;
 	ProtocolAttributeValue value;
+	struct ProtocolAttribute *next;
 } ProtocolAttribute;
 
 typedef struct Protocol {
 	uint8_t mnemonic;
 	ProtocolAttribute *attributes;
-	uint8_t attributesSize;
 	char *text;
 } Protocol;
 

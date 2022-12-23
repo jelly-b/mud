@@ -47,11 +47,11 @@ void registerRadioSender(void (*_send)(uint8_t address[], uint8_t data[], int da
 }
 
 void registerActionProtocol(ProtocolDescription protocolDescription,
-		uint8_t (*assembleDomain)(Protocol *, void *), uint8_t (*processDomain)(void *)) {
-	registerInboundProtocol(protocolDescription, assembleDomain, processDomain);
+			uint8_t (*processProtocol)(Protocol *), bool isQueryProtocol) {
+	registerInboundProtocol(protocolDescription, processProtocol, isQueryProtocol);
 }
 bool unregisterActionProtocol(uint8_t mnemomic) {
-	unregisterInboundProtocol(mnemomic);
+	return unregisterInboundProtocol(mnemomic);
 }
 
 void unregisterThingHooks() {
@@ -72,7 +72,7 @@ void registerLoraDacIntroductionProtocol() {
 	ProtocolName pNIntrodction ={{0xf8, 0x05}, 0x00};
 	ProtocolAttributeDescription padsIntroduction[] = {padIntroductionAddress};
 	ProtocolDescription pDIntroduction = createProtocolDescription(TACP_PROTOCOL_INTRODUCTION,
-		pNIntrodction, padsIntroduction, 2, false);
+		pNIntrodction, padsIntroduction, 1, true);
 
 	registerOutboundProtocol(pDIntroduction);
 }
@@ -81,36 +81,50 @@ void registerLoraDacProtocols() {
 	registerLoraDacIntroductionProtocol();
 }
 
+void sendAndRelease(uint8_t to[], ProtocolData *pData) {
+	send(to, pData->data, pData->dataSize);
+	releaseProtocolData(pData);
+}
+
 int introduce(char *thingId, int thingIdSize) {
 	Protocol introduction;
 	introduction.mnemonic = TACP_PROTOCOL_INTRODUCTION;
-	introduction.attributesSize = 1;
-	introduction.attributes = (ProtocolAttribute *)malloc(sizeof(ProtocolAttribute) * 1);
 
-	if (!introduction.attributes)
-		return TACP_ERROR_OUT_OF_MEMEORY;
-	
-	uint8_t aAddress[] ={0xef, 0xee, 0x1f};
-	int result = createProtocolBytesAttribute(introduction.attributes,
-		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, aAddress, 3);
-	if (result != 0)
-		return result;
+	uint8_t aAddress[] = {0xef, 0xee, 0x1f};
+	if (addBytesAttribute(&introduction, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
+			aAddress, 3) != 0)
+		return THING_ERROR_SET_PROTOCOL_ATTRIBUTE;
 
-	createProtocolText(&introduction, thingId);
-	
+	if (setText(&introduction, thingId) != 0)
+		return THING_ERROR_SET_PROTOCOL_TEXT;
+
 	ProtocolData pData;
-	translateProtocol(&introduction, &pData);
-	releaseProtocolResources(&introduction);
+	if (translateAndRelease(&introduction, &pData) != 0)
+		return THING_ERROR_PROTOCOL_TRANSLATION;
 
 	uint8_t aDacServiceAddress[] = {0xef, 0xef, 0x1f};
-	send(aDacServiceAddress, pData.data, pData.dataSize);
-
-	releaseProtocolData(&pData);
+	sendAndRelease(aDacServiceAddress, &pData);
 
 	return 0;
 }
 
+bool checkHooks() {
+	if (loadThingInfo == NULL ||
+			saveThingInfo == NULL ||
+			send == NULL ||
+			configureRadio == NULL ||
+			reset == NULL ||
+			configureProtocols == NULL) {
+		return false;
+	}
+
+	return true;
+}
+
 int toBeAThing() {
+	if (!checkHooks())
+		return THING_ERROR_LACK_OF_HOOKS;
+
 	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);
 
@@ -122,7 +136,7 @@ int toBeAThing() {
 		registerLoraDacProtocols();
 		int result = introduce(thingInfo.thingId, thingInfo.thingIdSize);
 		if (result != 0)
-			return result;
+			return THING_ERROR_DAC_INTRODUCE;
 
 		dacState = INTRODUCTING;
 
@@ -133,5 +147,5 @@ int toBeAThing() {
 }
 
 int processReceivedData(uint8_t data[], int dataSize) {
-
+	return -1;
 }

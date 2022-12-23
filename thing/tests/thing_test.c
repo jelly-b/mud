@@ -48,6 +48,16 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 			0xff
 		};
 		TEST_ASSERT_EQUAL_UINT8_ARRAY(introductionData, data, dataSize);
+
+		uint8_t allocationData[] ={
+			0xff,
+				0xf8, 0x05, 0x03, 0x03, 0x00,
+					0x04, 0xfb, 0x00, 0x00, 0x17, 0xfe,
+					0x05, 0xfb, 0x00, 0x00, 0x17, 0xfe,
+					0x06, 0xfb, 0x00, 0x01, 0x17,
+			0xff
+		};
+		TEST_ASSERT_EQUAL(0, processReceivedData(allocationData, ARRAY_SIZE(allocationData)));
 	}
 }
 
@@ -97,7 +107,7 @@ void testLoraDacAllocated() {
 	TEST_ASSERT_NULL(thingInfo.gatewayUplinkAddress);
 	TEST_ASSERT_NULL(thingInfo.gatewayDownlinkAddress);
 
-	toBeAThing();
+	TEST_ASSERT_EQUAL(0, toBeAThing());
 
 	loadThingInfo(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
@@ -111,7 +121,7 @@ void testLoraDacNotConfigured() {
 	loadThingInfo(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
 
-	toBeAThing();*/
+	TEST_ASSERT_EQUAL(0, toBeAThing());*/
 }
 
 void testLoraDacConfigured() {
@@ -119,7 +129,7 @@ void testLoraDacConfigured() {
 	loadThingInfo(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
 
-	toBeAThing();*/
+	TEST_ASSERT_EQUAL(0, toBeAThing());*/
 }
 
 void testProcessFlashAction() {
@@ -127,7 +137,7 @@ void testProcessFlashAction() {
 	loadThingInfo(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(CONFIGURED, thingInfo.dacState);
 
-	toBeAThing();*/
+	TEST_ASSERT_EQUAL(0, toBeAThing());*/
 }
 
 int main() {
