@@ -135,6 +135,9 @@ int setText(Protocol *protocol, char *text) {
 	if(protocol->text)
 		return TACP_ERROR_CHANGE_CLOSED;
 
+	if (strlen(text) > MAX_TEXT_DATA_SIZE)
+		return TACP_ERROR_TEXT_DATA_TOO_LARGE;
+
 	protocol->text = (char *)malloc(strlen(text) + 1);
 	if (!protocol->text)
 		return TACP_ERROR_OUT_OF_MEMEORY;
@@ -263,7 +266,11 @@ bool unregisterOutboundProtocol(uint8_t mnemomic) {
 }
 
 int escape(uint8_t data[], int size, ProtocolData *pData) {
+	if (size > MAX_ATTRIBUTE_DATA_SIZE)
+		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
+
 	int position = 0;
+	uint8_t buff[MAX_ATTRIBUTE_DATA_SIZE];
 	for (int i = 0; i < size; i++) {
 		if (position > MAX_ATTRIBUTE_DATA_SIZE)
 			return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
@@ -274,24 +281,98 @@ int escape(uint8_t data[], int size, ProtocolData *pData) {
 				data[i] == FLAG_ESCAPE ||
 				data[i] == FLAG_BYTES_TYPE ||
 				data[i] == FLAG_BYTE_TYPE) {
-			pData->data[position] = FLAG_ESCAPE;
+			buff[position] = FLAG_ESCAPE;
 			position++;
 		}
 
-		pData->data[position] = data[i];
+		buff[position] = data[i];
 		position++;
 	}
 
 	if (position == 1) {
-		pData->data[1] = pData->data[0];
+		pData->data = malloc(sizeof(uint8_t) * 2);
+		if (!pData->data)
+			return TACP_ERROR_OUT_OF_MEMEORY;
+
+		pData->data[1] = buff[0];
 		pData->data[0] = FLAG_NOREPLACE;
 		pData->dataSize = 2;
 	} else if (position == 2) {
+		pData->data = malloc(sizeof(uint8_t) * 3);
+		if(!pData->data)
+			return TACP_ERROR_OUT_OF_MEMEORY;
+
 		pData->data[2] = pData->data[1];
 		pData->data[1] = pData->data[0];
 		pData->data[0] = FLAG_NOREPLACE;
 		pData->dataSize = 3;
 	} else {
+		pData->data = malloc(sizeof(uint8_t) * position);
+		if(!pData->data)
+			return TACP_ERROR_OUT_OF_MEMEORY;
+
+		memcpy(pData->data, buff, position);
+		pData->dataSize = position;
+	}
+
+	return 0;
+}
+
+bool isEscapedByte(uint8_t b) {
+	return b >= 0xfa && b <= 0xff;
+}
+
+int unescape(uint8_t data[], int size, ProtocolData *pData) {
+	if (size > MAX_TEXT_DATA_SIZE)
+		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
+
+	int position = 0;
+	uint8_t buff[MAX_TEXT_DATA_SIZE];
+	for (int i = 0; i < size; i++) {
+		if (data[i] == FLAG_ESCAPE && i < (size - 1) && isEscapedByte(data[i + 1])) {
+			continue;
+		}
+
+		buff[position] = data[i];
+		position++;
+	}
+
+	if (position == 1) {
+		pData->data = malloc(sizeof(uint8_t) * 1);
+		if (!pData->data)
+			TACP_ERROR_OUT_OF_MEMEORY;
+
+		pData->data[0] = buff[0];
+		pData->dataSize = 1;
+	} else if (buff[0] == FLAG_BYTES_TYPE) {
+		pData->data = malloc(sizeof(uint8_t) * (position - 1));
+		if(!pData->data)
+			TACP_ERROR_OUT_OF_MEMEORY;
+
+		memcpy(pData->data, buff + 1, position - 1);
+		pData->dataSize = position - 1;
+	} else if ((position == 2 && buff[0] == FLAG_BYTE_TYPE) ||
+				(position == 2 && buff[0] == FLAG_NOREPLACE)) {
+		pData->data = malloc(sizeof(uint8_t) * 1);
+		if(!pData->data)
+			TACP_ERROR_OUT_OF_MEMEORY;
+
+		pData->data[0] = buff[1];
+		pData->dataSize = 1;
+	} else if (position == 3 && buff[0] == FLAG_NOREPLACE) {
+		pData->data = malloc(sizeof(uint8_t) * 2);
+		if(!pData->data)
+			TACP_ERROR_OUT_OF_MEMEORY;
+
+		pData->data[0] = buff[1];
+		pData->data[1] = buff[2];
+		pData->dataSize = 2;
+	} else {
+		pData->data = malloc(sizeof(uint8_t) * position);
+		if(!pData->data)
+			TACP_ERROR_OUT_OF_MEMEORY;
+
+		memcpy(pData->data, buff, position);
 		pData->dataSize = position;
 	}
 
@@ -434,37 +515,51 @@ int assembleProtocolAttributeValue(ProtocolData *pData, ProtocolAttribute *attri
 		}
 		attribute->value.bValue = *value;
 	} else {
+		ProtocolData unescapedValue;
 		int attributeDataSize = attributeValueEndPosition - attributeValueStartPosition;
-		unsigned char *attributeValue = malloc(sizeof(char) * (attributeValueSize + 1));
-		if (!attributeValue)
-			return TACP_ERROR_OUT_OF_MEMEORY;
+		int unescapeResult = unescape(pData->data + attributeValueStartPosition,
+			attributeDataSize, &unescapedValue);
+		if (unescapeResult != 0) {
+			releaseProtocolData(&unescapedValue);
+			return unescapeResult;
+		}
 
-		bool escaped = false;
-		int attributeValuePosition = 0;
-		for (int i = 0; i < attributeDataSize; i++) {
-			if (!escaped && pData->data[attributeValueStartPosition +  i] == FLAG_ESCAPE) {
-				escaped = true;
-				continue;
+		if (dataType == TYPE_BYTES) {
+			uint8_t *attributeValue = malloc(sizeof(uint8_t) * (unescapedValue.dataSize + 1));
+			if(!attributeValue) {
+				releaseProtocolData(&unescapedValue);
+				return TACP_ERROR_OUT_OF_MEMEORY;
 			}
 
-			*(attributeValue + attributeValuePosition) = (char)pData->data[attributeValueStartPosition +  i];
-			attributeValuePosition++;
-			escaped =false;
-		}
-		*(attributeValue + attributeValueSize) = 0;
+			memcpy(attributeValue + 1, unescapedValue.data, unescapedValue.dataSize);
+			attributeValue[0] = unescapedValue.dataSize;
 
-		if (dataType == TYPE_INT) {
-			attribute->value.iValue = atoi(attributeValue);
-		} else if(dataType == TYPE_FLOAT) {
-			attribute->value.fValue = atof(attributeValue);
-		} else if (dataType == TYPE_BYTE) {
-		} else if (dataType == TYPE_BYTES) {
+			releaseProtocolData(&unescapedValue);
+
+			attribute->value.bsValue = attributeValue;
 		} else {
-			attribute->value.sValue = attributeValue;
-		}
+			char *attributeValue = malloc(sizeof(char) * (unescapedValue.dataSize + 1));
+			if(!attributeValue) {
+				releaseProtocolData(&unescapedValue);
+				return TACP_ERROR_OUT_OF_MEMEORY;
+			}
 
-		if (dataType != TYPE_STRING)
-			free(attributeValue);
+			memcpy(attributeValue, unescapedValue.data, unescapedValue.dataSize);
+			attributeValue[unescapedValue.dataSize] = '\0';
+
+			releaseProtocolData(&unescapedValue);
+
+			if(dataType == TYPE_INT) {
+				attribute->value.iValue = atoi(attributeValue);
+			} else if(dataType == TYPE_FLOAT) {
+				attribute->value.fValue = atof(attributeValue);
+			} else {
+				attribute->value.sValue = attributeValue;
+			}
+
+			if(dataType != TYPE_STRING)
+				free(attributeValue);
+		}
 	}
 
 	return 0;
@@ -565,37 +660,20 @@ int doParseProtocol(ProtocolData *pData, Protocol *protocol) {
 
 	position++;
 	int textDataSize = pData->dataSize - position - 1;
-	int escapeNumber = 0;
-	bool escaped = false;
-	for (int i = 0; i < textDataSize; i++) {
-		uint8_t current = pData->data[position + i];
-		if (!escaped && current == FLAG_ESCAPE) {
-			if (position + i + 1 >= (pData->dataSize - 1) ||
-					pData->data[position + i +1] < 0xfa)
-				return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
-
-			escaped = true;
-			escapeNumber++;
-		} else if (escaped) {
-			escaped = false;
-			continue;
-		} else {
-			// NOOP
-		}
+	ProtocolData textData;
+	int unescapeResult = unescape(pData->data + position, textDataSize, &textData);
+	if (unescapeResult != 0) {
+		releaseProtocolData(&textData);
+		return unescapeResult;
 	}
 
-	unsigned char *text = (unsigned char *)malloc(sizeof(char) * (textDataSize - escapeNumber + 1));
-	int textPosition = 0;
-	for (int i = 0; i < textDataSize; i++) {
-		uint8_t current = pData->data[position + i];
-		if (current == FLAG_ESCAPE) {
-			continue;
-		} else {
-			*(text + textPosition) = current;
-			textPosition++;
-		}
-	}
-	*(text + textPosition) = 0;
+	char *text = malloc(sizeof(char) * (textDataSize + 1));
+	if(!text)
+		return TACP_ERROR_OUT_OF_MEMEORY;
+
+	memcpy(text, textData.data, textDataSize);
+	*(text + textDataSize) = 0;
+	releaseProtocolData(&textData);
 
 	protocol->text = text;
 
@@ -641,7 +719,10 @@ void releaseProtocolResources(Protocol *protocol) {
 		}
 
 		free(last);
-		previous->next = NULL;
+
+		if (previous)
+			previous->next = NULL;
+
 		last = previous;
 	}
 }
@@ -675,36 +756,24 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 	buff[4] = attributesSize;
 	buff[5] = protocol->text ? 0x80 : 0x00;
 
-	ProtocolData attributeData;
-	if (attributesSize != 0) {
-		attributeData.data = malloc(sizeof(uint8_t) * MAX_ATTRIBUTE_DATA_SIZE);
-		if(!attributeData.data)
-			return TACP_ERROR_OUT_OF_MEMEORY;
-	}
-
 	int position = 6;
 
 	ProtocolAttribute *attribute = protocol->attributes;
 	while (attribute) {
 		ProtocolAttributeDescription *attributeDescription = getAttributeDescriptionByMnemonic(description, attribute->mnemonic);
-		if (!attributeDescription) {
-			free(attributeData.data);
+		if (!attributeDescription)
 			return TACP_ERROR_UNKNOWN_PROTOCOL_ATTRIBUTE_MNEMONIC;
-		}
 
-		if (position >= MAX_PROTOCOL_DATA_SIZE - 1) {
-			free(attributeData.data);
+		if (position >= MAX_PROTOCOL_DATA_SIZE - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
-		}
 
 		buff[position] = attributeDescription->name;
 		position++;
 
-		if(position >= MAX_PROTOCOL_DATA_SIZE - 1) {
-			free(attributeData.data);
+		if(position >= MAX_PROTOCOL_DATA_SIZE - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
-		}
 
+		ProtocolData attributeData;
 		int escapeResult = 0;
 		if (attributeDescription->dataType == TYPE_BYTE) {
 			uint8_t aData[1] = {attribute->value.bValue};
@@ -725,7 +794,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		}
 
 		if (escapeResult != 0) {
-			free(attributeData.data);
+			releaseProtocolData(&attributeData);
 			return escapeResult;
 		} else if (attributeDescription->dataType == TYPE_BYTE) {
 			buff[position] = FLAG_BYTE_TYPE;
@@ -738,12 +807,12 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		}
 
 		if (position >= MAX_PROTOCOL_DATA_SIZE - 1) {
-			free(attributeData.data);
+			releaseProtocolData(&attributeData);
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
 
 		if (position + attributeData.dataSize >= MAX_PROTOCOL_DATA_SIZE - 1) {
-			free(attributeData.data);
+			releaseProtocolData(&attributeData);
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
 
@@ -754,13 +823,12 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		position++;
 		
 		if (position >= MAX_PROTOCOL_DATA_SIZE - 1) {
-			free(attributeData.data);
+			releaseProtocolData(&attributeData);
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
-	}
 
-	if (attributeData.dataSize != 0 && attributeData.data != NULL)
-		free(attributeData.data);
+		releaseProtocolData(&attributeData);
+	}
 
 	if (protocol->text) {
 		int textSize = strlen(protocol->text);

@@ -105,7 +105,7 @@ void testParseInboundProtocols(void) {
 	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, address, 4);
 
 	char *thingId = getText(&introductionProtocol);
-	TEST_ASSERT_EQUAL_STRING("SL-LE01-8660B11E", thingId);
+	TEST_ASSERT_EQUAL_STRING("SL-LE01-C980AFE9", thingId);
 }
 
 int main() {
