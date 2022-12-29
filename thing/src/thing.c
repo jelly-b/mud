@@ -77,6 +77,23 @@ void registerLoraDacIntroductionProtocol() {
 	registerOutboundProtocol(pDIntroduction);
 }
 
+void registerLoraDacAllocationProtocol() {
+	ProtocolAttributeDescription padGatewayUplinkAddress ={
+		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS, 0x04, TYPE_BYTES};
+	ProtocolAttributeDescription padGatewayDownlinkAddress = {
+		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x05, TYPE_BYTES};
+	ProtocolAttributeDescription padAllocatedAddress ={
+		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, 0x06, TYPE_BYTES};
+
+	ProtocolName pNAllocation ={{0xf8,0x05}, 0x03};
+	ProtocolAttributeDescription padsAllocation[] ={padGatewayUplinkAddress,
+			padGatewayDownlinkAddress, padAllocatedAddress};
+	ProtocolDescription pDAllocation = createProtocolDescription(TACP_PROTOCOL_ALLOCATION,
+		pNAllocation, padsAllocation, 3, false);
+
+	registerInboundProtocol(pDAllocation, processLoraDacAllocation, false);
+}
+
 void registerLoraDacProtocols() {
 	registerLoraDacIntroductionProtocol();
 }
@@ -87,7 +104,7 @@ void sendAndRelease(uint8_t to[], ProtocolData *pData) {
 }
 
 int introduce(char *thingId, int thingIdSize) {
-	Protocol introduction;
+	Protocol introduction = createEmptyProtocol();
 	introduction.mnemonic = TACP_PROTOCOL_INTRODUCTION;
 
 	uint8_t aAddress[] = {0xef, 0xee, 0x1f};
@@ -149,3 +166,8 @@ int toBeAThing() {
 int processReceivedData(uint8_t data[], int dataSize) {
 	return -1;
 }
+
+uint8_t processLoraDacAllocation(Protocol *protocol) {
+	return 1;
+}
+

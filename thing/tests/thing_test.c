@@ -1,5 +1,6 @@
 #include "unity.h"
 
+#include "tacp.h"
 #include "thing.h"
 
 static ThingInfo thingInfoInStorage = {16, "SL-LE01-C980AFE9", INITIAL, NULL, NULL, NULL};
@@ -49,6 +50,15 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 		};
 		TEST_ASSERT_EQUAL_UINT8_ARRAY(introductionData, data, dataSize);
 
+		ProtocolData introductionPData = {data, dataSize};
+		TEST_ASSERT_TRUE(isInboundProtocol(&introductionPData, TACP_PROTOCOL_INTRODUCTION));
+		Protocol protocol = createEmptyProtocol();
+		TEST_ASSERT_EQUAL_INT(0, parseProtocol(&introductionPData, &protocol));
+		uint8_t *actualAddress = getAttributeValueAsBytes(&protocol, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS);
+		TEST_ASSERT_NOT_NULL(actualAddress);
+		uint8_t expectedAddress[] = {0x03, 0xef, 0xee, 0x1f};
+		TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, actualAddress, 4);
+
 		uint8_t allocationData[] ={
 			0xff,
 				0xf8, 0x05, 0x03, 0x03, 0x00,
@@ -76,8 +86,40 @@ void registerThingHooks() {
 	registerProtocolsConfigurer(configureProtocols);
 }
 
+void registerInboundIntroductionProtocol() {
+	ProtocolAttributeDescription padIntroductionAddress = {
+		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x02, TYPE_BYTES};
+	
+	ProtocolName pNIntrodction ={{0xf8, 0x05}, 0x00};
+	ProtocolAttributeDescription padsIntroduction[] ={padIntroductionAddress};
+	ProtocolDescription pDIntroduction = createProtocolDescription(TACP_PROTOCOL_INTRODUCTION,
+		pNIntrodction, padsIntroduction, 1, true);
+
+	registerInboundProtocol(pDIntroduction, NULL, false);
+}
+
+void registerOutboundAllocationProtocol() {
+	ProtocolAttributeDescription padGatewayUplinkAddress ={
+		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS, 0x04, TYPE_BYTES};
+	ProtocolAttributeDescription padGatewayDownlinkAddress ={
+		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x05, TYPE_BYTES};
+	ProtocolAttributeDescription padAllocatedAddress ={
+		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, 0x06, TYPE_BYTES};
+
+	ProtocolName pNAllocation = {{0xf8,0x05}, 0x03};
+	ProtocolAttributeDescription padsAllocation[] = {padGatewayUplinkAddress,
+		padGatewayDownlinkAddress, padAllocatedAddress};
+	ProtocolDescription pDAllocation = createProtocolDescription(TACP_PROTOCOL_ALLOCATION,
+		pNAllocation, padsAllocation, 3, false);
+
+	registerOutboundProtocol(pDAllocation);
+}
+
 void setUp() {
 	registerThingHooks();
+
+	registerInboundIntroductionProtocol();
+	registerOutboundAllocationProtocol();
 
 	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);

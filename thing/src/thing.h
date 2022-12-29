@@ -49,4 +49,6 @@ int toBeAThing();
 int processReceivedData(uint8_t data[], int dataSize);
 void sendAndRelease(uint8_t to[], ProtocolData *pData);
 
+uint8_t processLoraDacAllocation(Protocol *protocol);
+
 #endif

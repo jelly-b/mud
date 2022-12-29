@@ -27,6 +27,11 @@ void copyInboundProtocolRegistration(InboundProtocolRegistration *dest,
 	dest->isQueryProtocol = src->isQueryProtocol;
 }
 
+Protocol createEmptyProtocol() {
+	Protocol pEmpty = {0xe0, NULL, NULL};
+	return pEmpty;
+}
+
 void addAttributeToProtocol(Protocol *protocol, ProtocolAttribute *attribute) {
 	attribute->previous = NULL;
 	attribute->next = NULL;
@@ -88,11 +93,10 @@ int addStringAttribute(Protocol *protocol, uint8_t mnemonic, char string[]) {
 	strcpy(attribute->value.sValue, string);
 
 	addAttributeToProtocol(protocol, attribute);
-
 	return 0;
 }
 
-void addByteAttribute(Protocol *protocol, uint8_t mnemonic, uint8_t bValue) {
+int addByteAttribute(Protocol *protocol, uint8_t mnemonic, uint8_t bValue) {
 	if(protocol->text)
 		return TACP_ERROR_CHANGE_CLOSED;
 
@@ -103,9 +107,10 @@ void addByteAttribute(Protocol *protocol, uint8_t mnemonic, uint8_t bValue) {
 	attribute->value.bValue = bValue;
 
 	addAttributeToProtocol(protocol, attribute);
+	return 0;
 }
 
-void addIntAttribute(Protocol *protocol, uint8_t mnemonic, int iValue) {
+int addIntAttribute(Protocol *protocol, uint8_t mnemonic, int iValue) {
 	if(protocol->text)
 		return TACP_ERROR_CHANGE_CLOSED;
 
@@ -116,9 +121,10 @@ void addIntAttribute(Protocol *protocol, uint8_t mnemonic, int iValue) {
 	attribute->value.iValue = iValue;
 
 	addAttributeToProtocol(protocol, attribute);
+	return 0;
 }
 
-void addFloatAttribute(Protocol *protocol, uint8_t mnemonic, float fValue) {
+int addFloatAttribute(Protocol *protocol, uint8_t mnemonic, float fValue) {
 	if(protocol->text)
 		return TACP_ERROR_CHANGE_CLOSED;
 
@@ -129,6 +135,7 @@ void addFloatAttribute(Protocol *protocol, uint8_t mnemonic, float fValue) {
 	attribute->value.fValue = fValue;
 
 	addAttributeToProtocol(protocol, attribute);
+	return 0;
 }
 
 int setText(Protocol *protocol, char *text) {
@@ -828,6 +835,8 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		}
 
 		releaseProtocolData(&attributeData);
+
+		attribute = attribute->next;
 	}
 
 	if (protocol->text) {

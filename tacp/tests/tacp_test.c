@@ -106,6 +106,8 @@ void testParseInboundProtocols(void) {
 
 	char *thingId = getText(&introductionProtocol);
 	TEST_ASSERT_EQUAL_STRING("SL-LE01-C980AFE9", thingId);
+
+	releaseProtocolResources(&introductionProtocol);
 }
 
 int main() {
