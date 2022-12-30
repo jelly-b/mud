@@ -50,16 +50,17 @@ typedef struct OutboundProtocolRegistration {
 } OutboundProtocolRegistration;
 
 enum TacpProtocolsMnemonic {
-	TACP_PROTOCOL_INTRODUCTION = 200,
+	TACP_PROTOCOL_INTRODUCTION = 100,
 	TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
 	TACP_PROTOCOL_ALLOCATION,
 	TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS,
-	TACP_PROTOCOL_ALLOCATION_ATTRIBUTE__GATEWAY_DOWNLINK_ADDRESS,
+	TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS,
 	TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS,
 	TACP_PROTOCOL_ALLOCATED
 };
 
 Protocol createEmptyProtocol();
+Protocol createEmptyProtocolByMenmonic(uint8_t menmonic);
 int addIntAttribute(Protocol *protocol, uint8_t mnemonic, int iValue);
 int addFloatAttribute(Protocol *protocol, uint8_t mnemonic, float fValue);
 int addByteAttribute(Protocol *protocol, uint8_t mnemonic, uint8_t bValue);

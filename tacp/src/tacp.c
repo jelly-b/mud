@@ -28,7 +28,11 @@ void copyInboundProtocolRegistration(InboundProtocolRegistration *dest,
 }
 
 Protocol createEmptyProtocol() {
-	Protocol pEmpty = {0xe0, NULL, NULL};
+	return createEmptyProtocolByMenmonic(0xe0);
+}
+
+Protocol createEmptyProtocolByMenmonic(uint8_t menmonic) {
+	Protocol pEmpty = {menmonic, NULL, NULL};
 	return pEmpty;
 }
 
@@ -182,8 +186,16 @@ void registerInboundProtocol(ProtocolDescription protocolDescription,
 	InboundProtocolRegistration *newestRegistration = malloc(sizeof(InboundProtocolRegistration));
 	newestRegistration->description.mnemomic = protocolDescription.mnemomic;
 	newestRegistration->description.name = protocolDescription.name;
-	newestRegistration->description.attributes = protocolDescription.attributes;
+
+	newestRegistration->description.attributes = malloc(sizeof(ProtocolAttributeDescription) * protocolDescription.attributesSize);
+	for(int i = 0; i < protocolDescription.attributesSize; i++) {
+		ProtocolAttributeDescription *pad = (newestRegistration->description.attributes) + i;
+		pad->mnemonic = ((protocolDescription.attributes) + i)->mnemonic;
+		pad->name = ((protocolDescription.attributes) + i)->name;
+		pad->dataType = ((protocolDescription.attributes) + i)->dataType;
+	}
 	newestRegistration->description.attributesSize = protocolDescription.attributesSize;
+
 	newestRegistration->processProtocol = processProtocol;
 	newestRegistration->isQueryProtocol = isQueryProtocol;
 	newestRegistration->next = NULL;
@@ -230,7 +242,14 @@ void registerOutboundProtocol(ProtocolDescription protocolDescription) {
 	OutboundProtocolRegistration *newestRegistration = malloc(sizeof(OutboundProtocolRegistration));
 	newestRegistration->description.mnemomic = protocolDescription.mnemomic;
 	newestRegistration->description.name = protocolDescription.name;
-	newestRegistration->description.attributes = protocolDescription.attributes;
+
+	newestRegistration->description.attributes = malloc(sizeof(ProtocolAttributeDescription) * protocolDescription.attributesSize);
+	for (int i = 0; i < protocolDescription.attributesSize; i++) {
+		ProtocolAttributeDescription *pad = (newestRegistration->description.attributes) + i;
+		pad->mnemonic = ((protocolDescription.attributes) + i)->mnemonic;
+		pad->name = ((protocolDescription.attributes) + i)->name;
+		pad->dataType = ((protocolDescription.attributes) + i)->dataType;
+	}
 	newestRegistration->description.attributesSize = protocolDescription.attributesSize;
 	newestRegistration->next = NULL;
 
@@ -848,19 +867,21 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		position += textSize;
 	}
 
+	int dataSize;
 	if (buff[position - 1] == FLAG_UNIT_SPLITTER) {
 		buff[position - 1] = FLAG_DOC_BEGINNING_END;
+		dataSize = position;
 	} else {
 		if (position >= MAX_PROTOCOL_DATA_SIZE - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
 		buff[position] = FLAG_DOC_BEGINNING_END;
+		dataSize = position + 1;
 	}
 
 	pData->data = NULL;
 	pData->dataSize = 0;
 
-	int dataSize = position + 1;
 	pData->data = malloc(dataSize * sizeof(uint8_t));
 	if (!pData->data)
 		return TACP_ERROR_OUT_OF_MEMEORY;

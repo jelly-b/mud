@@ -41,33 +41,42 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 		TEST_ASSERT_EQUAL_UINT8_ARRAY(dacServiceAddress, address, 3);
 
 		TEST_ASSERT_EQUAL_INT(29, dataSize);
-		uint8_t introductionData[] = {
+		uint8_t dIntroduction[] = {
 			0xff,
 				0xf8, 0x05, 0x00, 0x01, 0x80,
 					0x02, 0xfb, 0xef, 0xee, 0x1f, 0xfe,
 					0x53, 0x4c, 0x2d, 0x4c, 0x45, 0x30, 0x31, 0x2d, 0x43, 0x39, 0x38, 0x30, 0x41, 0x46, 0x45, 0x39,
 			0xff
 		};
-		TEST_ASSERT_EQUAL_UINT8_ARRAY(introductionData, data, dataSize);
+		TEST_ASSERT_EQUAL_UINT8_ARRAY(dIntroduction, data, dataSize);
 
-		ProtocolData introductionPData = {data, dataSize};
-		TEST_ASSERT_TRUE(isInboundProtocol(&introductionPData, TACP_PROTOCOL_INTRODUCTION));
+		ProtocolData pDataIntroduction = {data, dataSize};
+		TEST_ASSERT_TRUE(isInboundProtocol(&pDataIntroduction, TACP_PROTOCOL_INTRODUCTION));
 		Protocol protocol = createEmptyProtocol();
-		TEST_ASSERT_EQUAL_INT(0, parseProtocol(&introductionPData, &protocol));
+		TEST_ASSERT_EQUAL_INT(0, parseProtocol(&pDataIntroduction, &protocol));
 		uint8_t *actualAddress = getAttributeValueAsBytes(&protocol, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS);
 		TEST_ASSERT_NOT_NULL(actualAddress);
 		uint8_t expectedAddress[] = {0x03, 0xef, 0xee, 0x1f};
 		TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, actualAddress, 4);
 
-		uint8_t allocationData[] ={
-			0xff,
-				0xf8, 0x05, 0x03, 0x03, 0x00,
-					0x04, 0xfb, 0x00, 0x00, 0x17, 0xfe,
-					0x05, 0xfb, 0x00, 0x00, 0x17, 0xfe,
-					0x06, 0xfb, 0x00, 0x01, 0x17,
-			0xff
-		};
-		TEST_ASSERT_EQUAL(0, processReceivedData(allocationData, ARRAY_SIZE(allocationData)));
+		Protocol pAllocation = createEmptyProtocolByMenmonic(TACP_PROTOCOL_ALLOCATION);
+
+		uint8_t gatewayUplinkAddress[] = {0x00, 0xef, 0x17};
+		addBytesAttribute(&pAllocation,
+			TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS, gatewayUplinkAddress, 3);
+
+		uint8_t gatewayDownlinkAddress[] = {0x00, 0x00, 0x17};
+		addBytesAttribute(&pAllocation,
+			TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS, gatewayDownlinkAddress, 3);
+
+		uint8_t allocatedAddress[] = {0x00, 0x01, 0x17};
+		addBytesAttribute(&pAllocation,
+			TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, allocatedAddress, 3);
+
+		ProtocolData pDataAllocation;
+		TEST_ASSERT_EQUAL_INT(0, translateAndRelease(&pAllocation, &pDataAllocation));
+
+		TEST_ASSERT_EQUAL(0, processReceivedData(pDataAllocation.data, pDataAllocation.dataSize));
 	}
 }
 
@@ -102,7 +111,7 @@ void registerOutboundAllocationProtocol() {
 	ProtocolAttributeDescription padGatewayUplinkAddress ={
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS, 0x04, TYPE_BYTES};
 	ProtocolAttributeDescription padGatewayDownlinkAddress ={
-		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x05, TYPE_BYTES};
+		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS, 0x05, TYPE_BYTES};
 	ProtocolAttributeDescription padAllocatedAddress ={
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, 0x06, TYPE_BYTES};
 

@@ -81,11 +81,11 @@ void registerLoraDacAllocationProtocol() {
 	ProtocolAttributeDescription padGatewayUplinkAddress ={
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS, 0x04, TYPE_BYTES};
 	ProtocolAttributeDescription padGatewayDownlinkAddress = {
-		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x05, TYPE_BYTES};
+		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS, 0x05, TYPE_BYTES};
 	ProtocolAttributeDescription padAllocatedAddress ={
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, 0x06, TYPE_BYTES};
 
-	ProtocolName pNAllocation ={{0xf8,0x05}, 0x03};
+	ProtocolName pNAllocation ={{0xf8, 0x05}, 0x03};
 	ProtocolAttributeDescription padsAllocation[] ={padGatewayUplinkAddress,
 			padGatewayDownlinkAddress, padAllocatedAddress};
 	ProtocolDescription pDAllocation = createProtocolDescription(TACP_PROTOCOL_ALLOCATION,
@@ -96,6 +96,7 @@ void registerLoraDacAllocationProtocol() {
 
 void registerLoraDacProtocols() {
 	registerLoraDacIntroductionProtocol();
+	registerLoraDacAllocationProtocol();
 }
 
 void sendAndRelease(uint8_t to[], ProtocolData *pData) {
