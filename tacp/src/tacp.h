@@ -18,6 +18,8 @@
 #define TACP_ERROR_UNKNOWN_PROTOCOL_ATTRIBUTE_MNEMONIC -12
 #define TACP_ERROR_PROTOCOL_DATA_TOO_LARGE -13
 #define TACP_ERROR_CHANGE_CLOSED -14
+#define TACP_ERROR_INVALID_DAC_STATE -15
+#define TACP_ERROR_LACK_OF_ALLOCATION_PARAMETERS -16
 
 #define FLAG_DOC_BEGINNING_END 0xff
 #define FLAG_UNIT_SPLITTER 0xfe
@@ -59,6 +61,8 @@ enum TacpProtocolsMnemonic {
 	TACP_PROTOCOL_ALLOCATED
 };
 
+ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName name,
+	ProtocolAttributeDescription attributes[], int attributeSize, bool acceptText);
 Protocol createEmptyProtocol();
 Protocol createEmptyProtocolByMenmonic(uint8_t menmonic);
 int addIntAttribute(Protocol *protocol, uint8_t mnemonic, int iValue);

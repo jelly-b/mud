@@ -31,6 +31,7 @@ void saveThingInfo(ThingInfo *thingInfo) {
 	thingInfoInStorage.address = thingInfo->address;
 	thingInfoInStorage.gatewayUplinkAddress = thingInfo->gatewayUplinkAddress;
 	thingInfoInStorage.gatewayDownlinkAddress = thingInfo->gatewayDownlinkAddress;
+	thingInfoInStorage.dacState = thingInfo->dacState;
 }
 
 void configureProtocols() {}
@@ -76,7 +77,13 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 		ProtocolData pDataAllocation;
 		TEST_ASSERT_EQUAL_INT(0, translateAndRelease(&pAllocation, &pDataAllocation));
 
+		dacState = ALLOCATING;
+
 		TEST_ASSERT_EQUAL(0, processReceivedData(pDataAllocation.data, pDataAllocation.dataSize));
+		releaseProtocolData(&pDataAllocation);
+	} else if (dacState == ALLOCATING) {
+		ProtocolData pDataAllocated = {data, dataSize};
+		TEST_ASSERT_TRUE(isInboundProtocol(&pDataAllocated, TACP_PROTOCOL_ALLOCATED));
 	}
 }
 
@@ -124,11 +131,20 @@ void registerOutboundAllocationProtocol() {
 	registerOutboundProtocol(pDAllocation);
 }
 
+void registerInboundAllocatedProtocol() {
+	ProtocolName pNAllocated ={{0xf8, 0x05}, 0x07};
+	ProtocolDescription pDAllocated = createProtocolDescription(TACP_PROTOCOL_ALLOCATED,
+		pNAllocated, NULL, 0, true);
+
+	registerInboundProtocol(pDAllocated, NULL, false);
+}
+
 void setUp() {
 	registerThingHooks();
 
 	registerInboundIntroductionProtocol();
 	registerOutboundAllocationProtocol();
+	registerInboundAllocatedProtocol();
 
 	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);

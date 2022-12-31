@@ -62,7 +62,4 @@ typedef struct ProtocolData {
 	int dataSize;
 } ProtocolData;
 
-ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName name,
-	ProtocolAttributeDescription attributes[], int attributeSize, bool acceptText);
-
 #endif

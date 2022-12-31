@@ -170,12 +170,16 @@ ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName nam
 		acceptText
 	};
 
-	pd.attributes = (ProtocolAttributeDescription *)malloc(sizeof(ProtocolAttributeDescription) * pd.attributesSize);
-	for (int i = 0; i < pd.attributesSize; i++) {
-		ProtocolAttributeDescription *pad = pd.attributes + i;
-		pad->mnemonic = attributes[i].mnemonic;
-		pad->name = attributes[i].name;
-		pad->dataType = attributes[i].dataType;
+	if (pd.attributesSize != 0) {
+		pd.attributes = (ProtocolAttributeDescription *)malloc(sizeof(ProtocolAttributeDescription) * pd.attributesSize);
+		for(int i = 0; i < pd.attributesSize; i++) {
+			ProtocolAttributeDescription *pad = pd.attributes + i;
+			pad->mnemonic = attributes[i].mnemonic;
+			pad->name = attributes[i].name;
+			pad->dataType = attributes[i].dataType;
+		}
+	} else {
+		pd.attributes = NULL;
 	}
 
 	return pd;
