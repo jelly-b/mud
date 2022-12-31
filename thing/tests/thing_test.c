@@ -3,13 +3,12 @@
 #include "tacp.h"
 #include "thing.h"
 
+static const char *thingId = "SL-LE01-C980AFE9";
 static ThingInfo thingInfoInStorage = {16, "SL-LE01-C980AFE9", INITIAL, NULL, NULL, NULL};
 static int resetTimes = 0;
 static DacState dacState = INITIAL;
 
-void reset() {
-	TEST_ASSERT_EQUAL_INT(0, 1 - 1);
-}
+void reset() {}
 
 void configureRadio(uint8_t address[]) {
 }
@@ -53,12 +52,17 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 
 		ProtocolData pDataIntroduction = {data, dataSize};
 		TEST_ASSERT_TRUE(isInboundProtocol(&pDataIntroduction, TACP_PROTOCOL_INTRODUCTION));
+		
 		Protocol protocol = createEmptyProtocol();
 		TEST_ASSERT_EQUAL_INT(0, parseProtocol(&pDataIntroduction, &protocol));
+		
 		uint8_t *actualAddress = getAttributeValueAsBytes(&protocol, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS);
 		TEST_ASSERT_NOT_NULL(actualAddress);
 		uint8_t expectedAddress[] = {0x03, 0xef, 0xee, 0x1f};
 		TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, actualAddress, 4);
+
+		char *text = getText(&protocol);
+		TEST_ASSERT_EQUAL_CHAR_ARRAY(thingId, text, strlen(thingId));
 
 		Protocol pAllocation = createEmptyProtocolByMenmonic(TACP_PROTOCOL_ALLOCATION);
 
@@ -84,6 +88,14 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 	} else if (dacState == ALLOCATING) {
 		ProtocolData pDataAllocated = {data, dataSize};
 		TEST_ASSERT_TRUE(isInboundProtocol(&pDataAllocated, TACP_PROTOCOL_ALLOCATED));
+
+		Protocol pAllocated = createEmptyProtocol();
+		TEST_ASSERT_EQUAL_INT(0, parseProtocol(&pDataAllocated, &pAllocated));
+
+		char *text = getText(&pAllocated);
+		TEST_ASSERT_EQUAL_CHAR_ARRAY(thingId, text, strlen(thingId));
+
+		dacState = ALLOCATED;
 	}
 }
 
@@ -178,9 +190,13 @@ void testLoraDacAllocated() {
 
 	loadThingInfo(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
-	TEST_ASSERT_NOT_NULL(thingInfo.address);
-	TEST_ASSERT_NOT_NULL(thingInfo.gatewayUplinkAddress);
-	TEST_ASSERT_NOT_NULL(thingInfo.gatewayDownlinkAddress);
+
+	uint8_t expectedGatewayUplinkAddress[] = {0x00, 0xef, 0x17};
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedGatewayUplinkAddress, thingInfo.gatewayUplinkAddress, 3);
+	uint8_t expectedGatewayDownlinkAddress[] = {0x00, 0x00, 0x17};
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedGatewayDownlinkAddress, thingInfo.gatewayDownlinkAddress, 3);
+	uint8_t expectedAddress[] = {0x00, 0x01, 0x17};
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, thingInfo.address, 3);
 }
 
 void testLoraDacNotConfigured() {
@@ -212,7 +228,7 @@ int main() {
 	
 	RUN_TEST(testLoraDacAllocated);
 	RUN_TEST(testLoraDacNotConfigured);
-	RUN_TEST(testLoraDacNotConfigured);
+	RUN_TEST(testLoraDacConfigured);
 	RUN_TEST(testProcessFlashAction);
 	
 	return UNITY_END();
