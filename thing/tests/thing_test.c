@@ -94,12 +94,32 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 
 		char *text = getText(&pAllocated);
 		TEST_ASSERT_EQUAL_CHAR_ARRAY(thingId, text, strlen(thingId));
-
-		dacState = ALLOCATED;
 	}
 }
 
-void sendToGatewayMock2(uint8_t address[], uint8_t data[], int dataSize) {}
+void sendToGatewayMock2(uint8_t address[], uint8_t data[], int dataSize) {
+	ProtocolData pDataIsConfigured = {data, dataSize};
+	TEST_ASSERT_TRUE(isInboundProtocol(&pDataIsConfigured, TACP_PROTOCOL_IS_CONFIGURED));
+
+	Protocol pIsConfigured = createEmptyProtocol();
+	TEST_ASSERT_EQUAL_INT(0, parseProtocol(&pDataIsConfigured, &pIsConfigured));
+
+	uint8_t *nodeAddress = getAttributeValueAsBytes(&pIsConfigured, TACP_PROTOCOL_IS_CONFIGURED_ATTRIBUTE_ADDRESS);
+	uint8_t expectedNodeAddress[] = {0x03, 0xef, 0xee, 0x1f};
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedNodeAddress, nodeAddress, 4);
+
+	char *nodeThingId = getText(&pIsConfigured);
+	TEST_ASSERT_EQUAL_CHAR_ARRAY(thingId, nodeThingId, strlen(thingId));
+
+	Protocol pNotConfigured = createEmptyProtocolByMenmonic(TACP_PROTOCOL_NOT_CONFIGURED);
+	ProtocolData pDataNotConfigured;
+	TEST_ASSERT_EQUAL_INT(0,translateAndRelease(&pNotConfigured, &pDataNotConfigured));
+
+	dacState = INITIAL;
+
+	TEST_ASSERT_EQUAL(0, processReceivedData(pDataNotConfigured.data, pDataNotConfigured.dataSize));
+	releaseProtocolData(&pDataNotConfigured);
+}
 
 void sendToGatewayMock3(uint8_t address[], uint8_t data[], int dataSize) {}
 
@@ -119,7 +139,7 @@ void registerInboundIntroductionProtocol() {
 		TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS, 0x02, TYPE_BYTES};
 	
 	ProtocolName pNIntrodction ={{0xf8, 0x05}, 0x00};
-	ProtocolAttributeDescription padsIntroduction[] ={padIntroductionAddress};
+	ProtocolAttributeDescription padsIntroduction[] = {padIntroductionAddress};
 	ProtocolDescription pDIntroduction = createProtocolDescription(TACP_PROTOCOL_INTRODUCTION,
 		pNIntrodction, padsIntroduction, 1, true);
 
@@ -127,11 +147,11 @@ void registerInboundIntroductionProtocol() {
 }
 
 void registerOutboundAllocationProtocol() {
-	ProtocolAttributeDescription padGatewayUplinkAddress ={
+	ProtocolAttributeDescription padGatewayUplinkAddress = {
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS, 0x04, TYPE_BYTES};
-	ProtocolAttributeDescription padGatewayDownlinkAddress ={
+	ProtocolAttributeDescription padGatewayDownlinkAddress = {
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS, 0x05, TYPE_BYTES};
-	ProtocolAttributeDescription padAllocatedAddress ={
+	ProtocolAttributeDescription padAllocatedAddress = {
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, 0x06, TYPE_BYTES};
 
 	ProtocolName pNAllocation = {{0xf8,0x05}, 0x03};
@@ -151,12 +171,35 @@ void registerInboundAllocatedProtocol() {
 	registerInboundProtocol(pDAllocated, NULL, false);
 }
 
+void registerInboundIsConfiguredProtocol() {
+	ProtocolName pNIsConfigured = {{0xf8, 0x05}, 0x09};
+
+	ProtocolAttributeDescription padAddress = {
+		TACP_PROTOCOL_IS_CONFIGURED_ATTRIBUTE_ADDRESS, 0x02, TYPE_BYTES};
+	ProtocolAttributeDescription padsIsConfigured[] = {padAddress};
+
+	ProtocolDescription pDAllocated = createProtocolDescription(TACP_PROTOCOL_IS_CONFIGURED,
+		pNIsConfigured, padsIsConfigured, 1, true);
+
+	registerInboundProtocol(pDAllocated, NULL, false);
+}
+
+void registerOutboundNotConfiguredProtocol() {
+	ProtocolName pNNotConfigured = {{0xf8, 0x05}, 0x0a};
+	ProtocolDescription pDNotConfigured = createProtocolDescription(TACP_PROTOCOL_NOT_CONFIGURED,
+		pNNotConfigured, NULL, 0, false);
+
+	registerOutboundProtocol(pDNotConfigured);
+}
+
 void setUp() {
 	registerThingHooks();
 
 	registerInboundIntroductionProtocol();
 	registerOutboundAllocationProtocol();
 	registerInboundAllocatedProtocol();
+	registerInboundIsConfiguredProtocol();
+	registerOutboundNotConfiguredProtocol();
 
 	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);
@@ -200,11 +243,18 @@ void testLoraDacAllocated() {
 }
 
 void testLoraDacNotConfigured() {
-	/*ThingInfo thingInfo;
+	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
 
-	TEST_ASSERT_EQUAL(0, toBeAThing());*/
+	TEST_ASSERT_EQUAL(0, toBeAThing());
+
+	loadThingInfo(&thingInfo);
+
+	TEST_ASSERT_EQUAL_INT(INITIAL, thingInfo.dacState);
+	TEST_ASSERT_NULL(thingInfo.address);
+	TEST_ASSERT_NULL(thingInfo.gatewayUplinkAddress);
+	TEST_ASSERT_NULL(thingInfo.gatewayDownlinkAddress);
 }
 
 void testLoraDacConfigured() {

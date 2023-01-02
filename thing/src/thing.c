@@ -103,10 +103,34 @@ void registerLoraDacAllocatedProtocol() {
 	registerOutboundProtocol(pDAllocated);
 }
 
+void registerLoraDacIsConfiguredProtocol() {
+	ProtocolName pNIsConfigured = {{0xf8, 0x05}, 0x09};
+
+	ProtocolAttributeDescription padAddress = {
+		TACP_PROTOCOL_IS_CONFIGURED_ATTRIBUTE_ADDRESS, 0x02, TYPE_BYTES};
+	ProtocolAttributeDescription padsIsConfigured[] = {padAddress};
+
+	ProtocolDescription pDIsConfigured = createProtocolDescription(TACP_PROTOCOL_IS_CONFIGURED,
+		pNIsConfigured, padsIsConfigured, 1, true);
+
+	registerOutboundProtocol(pDIsConfigured);
+}
+
+void registerLoraDacNotConfiguredProtocol() {
+	ProtocolName pNNotConfigured ={{0xf8,0x05}, 0x0a};
+
+	ProtocolDescription pDIsConfigured = createProtocolDescription(TACP_PROTOCOL_NOT_CONFIGURED,
+		pNNotConfigured, NULL, 0, true);
+
+	registerInboundProtocol(pDIsConfigured, NULL, false);
+}
+
 void registerLoraDacProtocols() {
 	registerLoraDacIntroductionProtocol();
 	registerLoraDacAllocationProtocol();
 	registerLoraDacAllocatedProtocol();
+	registerLoraDacIsConfiguredProtocol();
+	registerLoraDacNotConfiguredProtocol();
 }
 
 void sendAndRelease(uint8_t to[], ProtocolData *pData) {
@@ -114,26 +138,46 @@ void sendAndRelease(uint8_t to[], ProtocolData *pData) {
 	releaseProtocolData(pData);
 }
 
-int introduce(char *thingId, int thingIdSize) {
-	Protocol introduction = createEmptyProtocol();
-	introduction.mnemonic = TACP_PROTOCOL_INTRODUCTION;
+int introduce(char *thingId) {
+	Protocol pIntroduction = createEmptyProtocolByMenmonic(TACP_PROTOCOL_INTRODUCTION);
 
-	uint8_t aAddress[] = {0xef, 0xee, 0x1f};
-	if (addBytesAttribute(&introduction, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
-			aAddress, 3) != 0)
+	uint8_t address[] = {0xef, 0xee, 0x1f};
+	if (addBytesAttribute(&pIntroduction, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
+			address, 3) != 0)
 		return THING_ERROR_SET_PROTOCOL_ATTRIBUTE;
 
-	if (setText(&introduction, thingId) != 0)
+	if (setText(&pIntroduction, thingId) != 0)
 		return THING_ERROR_SET_PROTOCOL_TEXT;
 
 	ProtocolData pData;
-	if (translateAndRelease(&introduction, &pData) != 0)
+	if (translateAndRelease(&pIntroduction, &pData) != 0)
 		return THING_ERROR_PROTOCOL_TRANSLATION;
 
 	thingInfo.dacState = INTRODUCTING;
 
-	uint8_t aDacServiceAddress[] = {0xef, 0xef, 0x1f};
-	sendAndRelease(aDacServiceAddress, &pData);
+	uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
+	sendAndRelease(dacServiceAddress, &pData);
+
+	return 0;
+}
+
+int isConfigured(char *thingId) {
+	Protocol pIsConfigured = createEmptyProtocolByMenmonic(TACP_PROTOCOL_IS_CONFIGURED);
+
+	uint8_t address[] ={0xef, 0xee, 0x1f};
+	if(addBytesAttribute(&pIsConfigured, TACP_PROTOCOL_IS_CONFIGURED_ATTRIBUTE_ADDRESS,
+				address, 3) != 0)
+		return THING_ERROR_SET_PROTOCOL_ATTRIBUTE;
+
+	if(setText(&pIsConfigured, thingId) != 0)
+		return THING_ERROR_SET_PROTOCOL_TEXT;
+
+	ProtocolData pData;
+	if(translateAndRelease(&pIsConfigured, &pData) != 0)
+		return THING_ERROR_PROTOCOL_TRANSLATION;
+
+	uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
+	sendAndRelease(dacServiceAddress, &pData);
 
 	return 0;
 }
@@ -157,20 +201,28 @@ int toBeAThing() {
 
 	loadThingInfo(&thingInfo);
 
-	if (thingInfo.dacState == INITIAL) {
-		uint8_t initialAddress[] = {0xef, 0xee, 0x1f};
+	if (thingInfo.dacState != CONFIGURED) {
+		uint8_t initialAddress[] ={0xef, 0xee, 0x1f};
 		configureRadio(initialAddress);
 
 		registerLoraDacProtocols();
-		int result = introduce(thingInfo.thingId, thingInfo.thingIdSize);
+	}
+
+	if (thingInfo.dacState == INITIAL) {
+		int result = introduce(thingInfo.thingId);
 		if (result != 0) {
 			thingInfo.dacState = INITIAL;
 			return THING_ERROR_DAC_INTRODUCE;
 		}
 
 		return 0;
-	} else {
-		return -1;
+	} else if (thingInfo.dacState == ALLOCATED) {
+		int result = isConfigured(thingInfo.thingId);
+		if(result != 0) {
+			return THING_ERROR_DAC_IS_CONFIGURED;
+		}
+
+		return 0;
 	}
 }
 
@@ -219,6 +271,17 @@ int processAllocation(Protocol *pAllocation) {
 	return allocated(gatewayUplinkAddress, gatewayDownlinkAddress, allocatedAddress);
 }
 
+int processNotConfigured() {
+	thingInfo.gatewayUplinkAddress = NULL;
+	thingInfo.gatewayDownlinkAddress = NULL;
+	thingInfo.address = NULL;
+	thingInfo.dacState = INITIAL;
+
+	saveThingInfo(&thingInfo);
+
+	reset();
+}
+
 int processDac(uint8_t data[], int dataSize) {
 	ProtocolData pData = {data, dataSize};
 
@@ -236,7 +299,20 @@ int processDac(uint8_t data[], int dataSize) {
 		processAllocation(&pAllocation);
 		releaseProtocolResources(&pAllocation);
 	} else if (thingInfo.dacState == ALLOCATED) {
-	
+		if (isInboundProtocol(&pData, TACP_PROTOCOL_NOT_CONFIGURED)) {
+			Protocol pNotConfigured = createEmptyProtocol();
+
+			int parseResult = parseProtocol(&pData, &pNotConfigured);
+			if(parseResult != 0)
+				return parseResult;
+
+			releaseProtocolResources(&pNotConfigured);
+			processNotConfigured();
+		} else if (isInboundProtocol(&pData,TACP_PROTOCOL_CONFIGURED)) {
+
+		} else {
+			return TACP_ERROR_INVALID_DAC_STATE;
+		}
 	} else {
 		return TACP_ERROR_INVALID_DAC_STATE;
 	}
