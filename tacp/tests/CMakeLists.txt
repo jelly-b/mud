@@ -21,3 +21,5 @@ target_include_directories(tacp_test PRIVATE
 	"${CMAKE_SOURCE_DIR}/tacp/src"
 )
 target_link_libraries(tacp_test PRIVATE tacp)
+
+add_test(tacp_test tacp_test)

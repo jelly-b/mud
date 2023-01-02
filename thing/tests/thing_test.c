@@ -121,9 +121,22 @@ void sendToGatewayMock2(uint8_t address[], uint8_t data[], int dataSize) {
 	releaseProtocolData(&pDataNotConfigured);
 }
 
-void sendToGatewayMock3(uint8_t address[], uint8_t data[], int dataSize) {}
+void sendToGatewayMock3(uint8_t address[], uint8_t data[], int dataSize) {
+	sendToGatewayMock1(address, data, dataSize);
+	if(dacState == ALLOCATING) {
+		Protocol pConfigured = createEmptyProtocolByMenmonic(TACP_PROTOCOL_CONFIGURED);
 
-void sendToGatewayMock4(uint8_t address[],uint8_t data[],int dataSize) {}
+		ProtocolData pDataConfigured;
+		TEST_ASSERT_EQUAL_INT(0, translateAndRelease(&pConfigured, &pDataConfigured));
+
+		dacState = INITIAL;
+
+		TEST_ASSERT_EQUAL(0, processReceivedData(pDataConfigured.data, pDataConfigured.dataSize));
+		releaseProtocolData(&pDataConfigured);
+	}
+}
+
+void sendToGatewayMock4(uint8_t address[], uint8_t data[], int dataSize) {}
 
 void registerThingHooks() {
 	registerResetter(reset);
@@ -192,6 +205,14 @@ void registerOutboundNotConfiguredProtocol() {
 	registerOutboundProtocol(pDNotConfigured);
 }
 
+void registerOutboundConfiguredProtocol() {
+	ProtocolName pNConfigured = {{0xf8,0x05}, 0x08};
+	ProtocolDescription pDConfigured = createProtocolDescription(TACP_PROTOCOL_CONFIGURED,
+		pNConfigured, NULL, 0, false);
+
+	registerOutboundProtocol(pDConfigured);
+}
+
 void setUp() {
 	registerThingHooks();
 
@@ -200,15 +221,16 @@ void setUp() {
 	registerInboundAllocatedProtocol();
 	registerInboundIsConfiguredProtocol();
 	registerOutboundNotConfiguredProtocol();
+	registerOutboundConfiguredProtocol();
 
 	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);
 
-	if(thingInfo.dacState == INITIAL) {
+	if(thingInfo.dacState == INITIAL && resetTimes == 0) {
 		registerRadioSender(sendToGatewayMock1);
-	} else if(thingInfo.dacState == ALLOCATED && resetTimes == 1) {
+	} else if(thingInfo.dacState == ALLOCATED) {
 		registerRadioSender(sendToGatewayMock2);
-	} else if(thingInfo.dacState == ALLOCATED && resetTimes == 2) {
+	} else if(thingInfo.dacState == INITIAL && resetTimes == 2) {
 		registerRadioSender(sendToGatewayMock3);
 	} else {
 		registerRadioSender(sendToGatewayMock4);
@@ -258,11 +280,14 @@ void testLoraDacNotConfigured() {
 }
 
 void testLoraDacConfigured() {
-	/*ThingInfo thingInfo;
+	ThingInfo thingInfo;
 	loadThingInfo(&thingInfo);
-	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
+	TEST_ASSERT_EQUAL_INT(INITIAL, thingInfo.dacState);
 
-	TEST_ASSERT_EQUAL(0, toBeAThing());*/
+	TEST_ASSERT_EQUAL(0, toBeAThing());
+
+	loadThingInfo(&thingInfo);
+	TEST_ASSERT_EQUAL_INT(CONFIGURED, thingInfo.dacState);
 }
 
 void testProcessFlashAction() {
