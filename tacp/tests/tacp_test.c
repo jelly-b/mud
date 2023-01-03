@@ -28,7 +28,7 @@ void registerInboundProtocols() {
 		}
 	};
 	ProtocolDescription pdFlash = createProtocolDescription(PROTOCOL_FLASH, flashProtocolName,
-		flashProtocolAttributes, ARRAY_SIZE(flashProtocolAttributes), false);
+		flashProtocolAttributes, 1, false);
 	registerInboundProtocol(pdFlash, NULL, false);
 
 	ProtocolName introductionProtocolName = {
@@ -43,8 +43,7 @@ void registerInboundProtocols() {
 		}
 	};
 	ProtocolDescription pdIntroduction = createProtocolDescription(PROTOCOL_INTRODUCTION,
-		introductionProtocolName, introductionProtocolAttributes,
-			ARRAY_SIZE(introductionProtocolAttributes), true);
+		introductionProtocolName, introductionProtocolAttributes, 1, true);
 	registerInboundProtocol(pdIntroduction, NULL, false);
 }
 

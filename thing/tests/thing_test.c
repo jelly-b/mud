@@ -1,21 +1,58 @@
+#include <string.h>
+
 #include "unity.h"
 
 #include "tacp.h"
 #include "thing.h"
 
+enum ProtocolsMnemonic {
+	PROTOCOL_FLASH,
+	PROTOCOL_FLASH_ATTRIBUTE_REPEAT
+};
+
 static const char *thingId = "SL-LE01-C980AFE9";
 static ThingInfo thingInfoInStorage = {16, "SL-LE01-C980AFE9", INITIAL, NULL, NULL, NULL};
 static int resetTimes = 0;
 static DacState dacState = INITIAL;
+static const uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
+static const uint8_t dacClientAddress[] ={0xef, 0xee, 0x1f};
+static const uint8_t configuredNodeAddress[] = {0x00, 0x01, 0x17};
+static uint8_t nodeAddress[] = {0x00, 0x00, 0x00};
 
-void reset() {}
+static bool flashProcessed = false;
 
-void configureRadio(uint8_t address[]) {
+void resetImpl() {}
+
+void changeRadioAddressImpl(uint8_t address[]) {
+	memcpy(nodeAddress, address, 3);
 }
 
-void changeRadioAddress(uint8_t address[]) {}
+void configureRadioImpl(uint8_t address[]) {
+	changeRadioAddressImpl(address);
+}
 
-void loadThingInfo(ThingInfo *thingInfo) {
+uint8_t processFlash(Protocol *protocol) {
+	uint8_t repeat;
+	TEST_ASSERT_TRUE(getAttributeValueAsByte(protocol, PROTOCOL_FLASH_ATTRIBUTE_REPEAT, &repeat));
+	TEST_ASSERT_EQUAL_UINT8(0x05, repeat);
+
+	flashProcessed = true;
+	return 0;
+}
+
+void configureProtocolsImpl() {
+	ProtocolAttributeDescription padFlashRepeat = {
+		PROTOCOL_FLASH_ATTRIBUTE_REPEAT, 0x01, TYPE_BYTE};
+
+	ProtocolName pNFlash ={{0xf7, 0x01}, 0x00};
+	ProtocolAttributeDescription padsFlash[] = {padFlashRepeat};
+	ProtocolDescription pDIntroduction = createProtocolDescription(PROTOCOL_FLASH,
+		pNFlash, padsFlash, 1, true);
+
+	registerActionProtocol(pDIntroduction, processFlash, false);
+}
+
+void loadThingInfoImpl(ThingInfo *thingInfo) {
 	thingInfo->thingId = thingInfoInStorage.thingId;
 	thingInfo->thingIdSize = thingInfoInStorage.thingIdSize;
 	thingInfo->dacState = thingInfoInStorage.dacState;
@@ -24,7 +61,7 @@ void loadThingInfo(ThingInfo *thingInfo) {
 	thingInfo->gatewayDownlinkAddress = thingInfoInStorage.gatewayDownlinkAddress;
 }
 
-void saveThingInfo(ThingInfo *thingInfo) {
+void saveThingInfoImpl(ThingInfo *thingInfo) {
 	thingInfoInStorage.thingId = thingInfo->thingId;
 	thingInfoInStorage.thingIdSize = thingInfo->thingIdSize;
 	thingInfoInStorage.address = thingInfo->address;
@@ -33,9 +70,10 @@ void saveThingInfo(ThingInfo *thingInfo) {
 	thingInfoInStorage.dacState = thingInfo->dacState;
 }
 
-void configureProtocols() {}
-
 void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacServiceAddress, address, 3);
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacClientAddress, nodeAddress, 3);
+
 	if (dacState == INITIAL) {
 		uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
 		TEST_ASSERT_EQUAL_UINT8_ARRAY(dacServiceAddress, address, 3);
@@ -98,6 +136,9 @@ void sendToGatewayMock1(uint8_t address[], uint8_t data[], int dataSize) {
 }
 
 void sendToGatewayMock2(uint8_t address[], uint8_t data[], int dataSize) {
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacServiceAddress, address, 3);
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacClientAddress, nodeAddress, 3);
+
 	ProtocolData pDataIsConfigured = {data, dataSize};
 	TEST_ASSERT_TRUE(isInboundProtocol(&pDataIsConfigured, TACP_PROTOCOL_IS_CONFIGURED));
 
@@ -122,6 +163,9 @@ void sendToGatewayMock2(uint8_t address[], uint8_t data[], int dataSize) {
 }
 
 void sendToGatewayMock3(uint8_t address[], uint8_t data[], int dataSize) {
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacServiceAddress, address, 3);
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacClientAddress, nodeAddress, 3);
+
 	sendToGatewayMock1(address, data, dataSize);
 	if(dacState == ALLOCATING) {
 		Protocol pConfigured = createEmptyProtocolByMenmonic(TACP_PROTOCOL_CONFIGURED);
@@ -136,15 +180,13 @@ void sendToGatewayMock3(uint8_t address[], uint8_t data[], int dataSize) {
 	}
 }
 
-void sendToGatewayMock4(uint8_t address[], uint8_t data[], int dataSize) {}
-
 void registerThingHooks() {
-	registerResetter(reset);
-	registerRadioConfigurer(configureRadio);
-	registerRadioAddressChanger(changeRadioAddress);
-	registerThingInfoLoader(loadThingInfo);
-	registerThingInfoSaver(saveThingInfo);
-	registerProtocolsConfigurer(configureProtocols);
+	registerResetter(resetImpl);
+	registerRadioConfigurer(configureRadioImpl);
+	registerRadioAddressChanger(changeRadioAddressImpl);
+	registerThingInfoLoader(loadThingInfoImpl);
+	registerThingInfoSaver(saveThingInfoImpl);
+	registerProtocolsConfigurer(configureProtocolsImpl);
 }
 
 void registerInboundIntroductionProtocol() {
@@ -167,7 +209,7 @@ void registerOutboundAllocationProtocol() {
 	ProtocolAttributeDescription padAllocatedAddress = {
 		TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS, 0x06, TYPE_BYTES};
 
-	ProtocolName pNAllocation = {{0xf8,0x05}, 0x03};
+	ProtocolName pNAllocation = {{0xf8, 0x05}, 0x03};
 	ProtocolAttributeDescription padsAllocation[] = {padGatewayUplinkAddress,
 		padGatewayDownlinkAddress, padAllocatedAddress};
 	ProtocolDescription pDAllocation = createProtocolDescription(TACP_PROTOCOL_ALLOCATION,
@@ -213,6 +255,18 @@ void registerOutboundConfiguredProtocol() {
 	registerOutboundProtocol(pDConfigured);
 }
 
+void registerOutboundFlashProtocol() {
+	ProtocolAttributeDescription padFlashRepeat = {
+		PROTOCOL_FLASH_ATTRIBUTE_REPEAT, 0x01, TYPE_BYTE};
+
+	ProtocolName pNFlash = {{0xf7, 0x01}, 0x00};
+	ProtocolAttributeDescription padsFlash[] = {padFlashRepeat};
+	ProtocolDescription pDIntroduction = createProtocolDescription(PROTOCOL_FLASH,
+		pNFlash, padsFlash, 1, false);
+
+	registerOutboundProtocol(pDIntroduction);
+}
+
 void setUp() {
 	registerThingHooks();
 
@@ -222,9 +276,10 @@ void setUp() {
 	registerInboundIsConfiguredProtocol();
 	registerOutboundNotConfiguredProtocol();
 	registerOutboundConfiguredProtocol();
+	registerOutboundFlashProtocol();
 
 	ThingInfo thingInfo;
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 
 	if(thingInfo.dacState == INITIAL && resetTimes == 0) {
 		registerRadioSender(sendToGatewayMock1);
@@ -233,18 +288,20 @@ void setUp() {
 	} else if(thingInfo.dacState == INITIAL && resetTimes == 2) {
 		registerRadioSender(sendToGatewayMock3);
 	} else {
-		registerRadioSender(sendToGatewayMock4);
+		// NOOP
 	}
+
+	flashProcessed = false;
 }
 
 void tearDown() {
-	reset();
+	resetImpl();
 	resetTimes++;
 }
 
 void testLoraDacAllocated() {
 	ThingInfo thingInfo;
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 
 	TEST_ASSERT_EQUAL_INT(INITIAL, thingInfo.dacState);
 	TEST_ASSERT_NULL(thingInfo.address);
@@ -253,7 +310,7 @@ void testLoraDacAllocated() {
 
 	TEST_ASSERT_EQUAL(0, toBeAThing());
 
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
 
 	uint8_t expectedGatewayUplinkAddress[] = {0x00, 0xef, 0x17};
@@ -262,40 +319,57 @@ void testLoraDacAllocated() {
 	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedGatewayDownlinkAddress, thingInfo.gatewayDownlinkAddress, 3);
 	uint8_t expectedAddress[] = {0x00, 0x01, 0x17};
 	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, thingInfo.address, 3);
+
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacClientAddress, nodeAddress, 3);
 }
 
 void testLoraDacNotConfigured() {
 	ThingInfo thingInfo;
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(ALLOCATED, thingInfo.dacState);
 
 	TEST_ASSERT_EQUAL(0, toBeAThing());
 
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 
 	TEST_ASSERT_EQUAL_INT(INITIAL, thingInfo.dacState);
 	TEST_ASSERT_NULL(thingInfo.address);
 	TEST_ASSERT_NULL(thingInfo.gatewayUplinkAddress);
 	TEST_ASSERT_NULL(thingInfo.gatewayDownlinkAddress);
+
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(dacClientAddress, nodeAddress, 3);
 }
 
 void testLoraDacConfigured() {
 	ThingInfo thingInfo;
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(INITIAL, thingInfo.dacState);
 
 	TEST_ASSERT_EQUAL(0, toBeAThing());
 
-	loadThingInfo(&thingInfo);
+	loadThingInfoImpl(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(CONFIGURED, thingInfo.dacState);
+
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(configuredNodeAddress, nodeAddress, 3);
 }
 
 void testProcessFlashAction() {
-	/*ThingInfo thingInfo;
-	loadThingInfo(&thingInfo);
+	ThingInfo thingInfo;
+	loadThingInfoImpl(&thingInfo);
 	TEST_ASSERT_EQUAL_INT(CONFIGURED, thingInfo.dacState);
 
-	TEST_ASSERT_EQUAL(0, toBeAThing());*/
+	TEST_ASSERT_EQUAL(0, toBeAThing());
+
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(configuredNodeAddress, nodeAddress,3);
+
+	Protocol pFlash = createEmptyProtocolByMenmonic(PROTOCOL_FLASH);
+	TEST_ASSERT_EQUAL(0, addByteAttribute(&pFlash, PROTOCOL_FLASH_ATTRIBUTE_REPEAT, 0x05));
+
+	ProtocolData pDataFlash;
+	TEST_ASSERT_EQUAL(0, translateAndRelease(&pFlash, &pDataFlash));
+	TEST_ASSERT_EQUAL(0, processReceivedData(pDataFlash.data, pDataFlash.dataSize));
+
+	TEST_ASSERT_TRUE(flashProcessed);
 }
 
 int main() {

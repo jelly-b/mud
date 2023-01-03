@@ -20,6 +20,7 @@
 #define TACP_ERROR_CHANGE_CLOSED -14
 #define TACP_ERROR_INVALID_DAC_STATE -15
 #define TACP_ERROR_LACK_OF_ALLOCATION_PARAMETERS -16
+#define TACP_ERROR_NO_REGISTRATED_PROCESSOR -16
 
 #define FLAG_DOC_BEGINNING_END 0xff
 #define FLAG_UNIT_SPLITTER 0xfe
@@ -107,5 +108,6 @@ bool isLanExecution(ProtocolData *pData);
 int parseLanExecution(ProtocolData *pData, Protocol *action, TinyId requestId);
 int parseInboundProtocol(ProtocolData *pData, Protocol *protocol);
 int translateLanNotification(Protocol *event, uint8_t *data);
+InboundProtocolRegistration *getInboundProtocolRegistrationByName(ProtocolName name);
 
 #endif

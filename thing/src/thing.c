@@ -15,6 +15,9 @@ static void (*send)(uint8_t[], uint8_t[], int) = NULL;
 
 static ThingInfo thingInfo;
 
+static uint8_t messages[MAX_PROTOCOL_DATA_SIZE * 2];
+static int messagesLength = 0;
+
 void registerResetter(void (*_reset)()) {
 	reset = _reset;
 }
@@ -256,8 +259,93 @@ int toBeAThing() {
 	return 0;
 }
 
-int processAsAThing(uint8_t data[], int dataSize) {
+void cleanMessages() {
+	messagesLength = 0;
+}
+
+void addMessage(uint8_t data[], int dataSize) {
+	memcpy(messages + messagesLength, data, dataSize);
+	messagesLength += dataSize;
+}
+
+int findProtocolStartPosition() {
+	for (int i = 0; i < messagesLength - 1; i++) {
+		if (messages[i] == FLAG_DOC_BEGINNING_END) {
+			if (messages[i + 1] == FLAG_DOC_BEGINNING_END)
+				continue;
+
+			return i;
+		}
+	}
+
 	return -1;
+}
+
+int findProtocolEndPosition(int startPosition) {
+	for(int i = startPosition + 1; i < messagesLength; i++) {
+		if(messages[i] == FLAG_DOC_BEGINNING_END) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+int processProtocol(int protocolStartPosition, int protocolEndPosition) {
+	ProtocolData pData = {messages + protocolStartPosition, (protocolEndPosition - protocolStartPosition + 1)};
+	if (isLanExecution(&pData)) {
+		
+	} else {
+		Protocol protocol;
+		int parseResult = parseProtocol(&pData,&protocol);
+		if (parseResult != 0) {
+			releaseProtocolResources(&protocol);
+			return parseResult;
+		}
+
+		ProtocolName name;
+		if(!getInboundProtocolNameByMnemonic(protocol.mnemonic, &name))
+			return TACP_ERROR_UNKNOWN_PROTOCOL_MNEMONIC;
+
+		InboundProtocolRegistration *registration = getInboundProtocolRegistrationByName(name);
+		if (!registration)
+			return TACP_ERROR_UNKNOWN_PROTOCOL_NAME;
+
+		if (!registration->processProtocol) {
+			return TACP_ERROR_NO_REGISTRATED_PROCESSOR;
+		}
+
+		registration->processProtocol(&protocol);
+		return 0;
+	}
+
+	messagesLength -= (protocolEndPosition - protocolStartPosition);
+	if (messagesLength > 0)
+		memcpy(messages, messages[protocolEndPosition], messagesLength);
+}
+
+int processMessage() {
+	int protocolStartPosition = findProtocolStartPosition();
+	if (protocolStartPosition == -1)
+		return;
+
+	int protocolEndPosition = findProtocolEndPosition(protocolStartPosition);
+	if (protocolEndPosition == -1)
+		return;
+
+	return processProtocol(protocolStartPosition, protocolEndPosition);
+}
+
+int processAsAThing(uint8_t data[], int dataSize) {
+	if (dataSize > MAX_PROTOCOL_DATA_SIZE * 2)
+		return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
+
+	if (messagesLength + dataSize > MAX_PROTOCOL_DATA_SIZE * 2) {
+		cleanMessages();
+	}
+	addMessage(data, dataSize);
+
+	return processMessage();
 }
 
 int allocated(uint8_t *gatewayUplinkAddress, uint8_t *gatewayDownlinkAddress,

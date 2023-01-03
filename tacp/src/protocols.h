@@ -5,7 +5,6 @@
 #include <stdbool.h>
 
 #define DATA_SIZE(data) sizeof(data) / sizeof(uint8_t)
-#define ARRAY_SIZE(array) sizeof(array) / sizeof(array[0])
 #define CREATE_PROTOCOL_DATA(data) {data, DATA_SIZE(data)}
 
 typedef enum DataType {

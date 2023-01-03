@@ -464,12 +464,19 @@ ProtocolDescription *getOutboundProtocolDescriptionByMnemonic(uint8_t mnemonic) 
 }
 
 ProtocolDescription *getInboundProtocolDescriptionByName(ProtocolName name) {
+	InboundProtocolRegistration *registration = getInboundProtocolRegistrationByName(name);
+	if (registration)
+		return &registration->description;
+}
+
+InboundProtocolRegistration *getInboundProtocolRegistrationByName(ProtocolName name) {
 	InboundProtocolRegistration *current = inboundProtocolRegistrations;
-	while (current) {
-		if (current->description.name.namespace[0] == name.namespace[0] &&
-					current->description.name.namespace[1] == name.namespace[1] &&
-					current->description.name.localName == name.localName) {
-			return &current->description;
+	while(current) {
+		if(current->description.name.namespace[0] == name.namespace[0] &&
+			current->description.name.namespace[1] == name.namespace[1] &&
+			current->description.name.localName == name.localName) {
+
+			return current;
 		}
 
 		current = current->next;
@@ -527,9 +534,6 @@ int assembleProtocolAttributeValue(ProtocolData *pData, ProtocolAttribute *attri
 			DataType dataType, int attributeValueStartPosition,
 				int attributeValueEndPosition, int escapeNumber) {
 	int attributeValueSize = (attributeValueEndPosition - attributeValueStartPosition - escapeNumber);
-	if (dataType == TYPE_BYTE && attributeValueSize != 1)
-		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
-
 	if (dataType == TYPE_BYTE) {
 		if (escapeNumber > 1)
 			return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
@@ -539,9 +543,9 @@ int assembleProtocolAttributeValue(ProtocolData *pData, ProtocolAttribute *attri
 			return TACP_ERROR_OUT_OF_MEMEORY;
 
 		if (escapeNumber == 0) {
-			*value = pData->data[attributeValueStartPosition];
-		} else {
 			*value = pData->data[attributeValueStartPosition + 1];
+		} else {
+			*value = pData->data[attributeValueStartPosition + 2];
 		}
 		attribute->value.bValue = *value;
 	} else {
@@ -806,8 +810,17 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		ProtocolData attributeData;
 		int escapeResult = 0;
 		if (attributeDescription->dataType == TYPE_BYTE) {
-			uint8_t aData[1] = {attribute->value.bValue};
-			escapeResult = escape(aData, 1, &attributeData);
+			uint8_t b = attribute->value.bValue;
+			if (isEscapedByte(b)) {
+				attributeData.data = malloc(sizeof(uint8_t) * 2);
+				attributeData.data[0] = FLAG_ESCAPE;
+				attributeData.data[1] = b;
+				attributeData.dataSize = 2;
+			} else {
+				attributeData.data = malloc(sizeof(uint8_t) * 1);
+				attributeData.data[0] = b;
+				attributeData.dataSize = 1;
+			}
 		} else if (attributeDescription->dataType == TYPE_INT) {
 			uint8_t aData[32];
 			sprintf(aData, "%d", attribute->value.iValue);
