@@ -370,6 +370,37 @@ void testProcessFlashAction() {
 	TEST_ASSERT_EQUAL(0, processReceivedData(pDataFlash.data, pDataFlash.dataSize));
 
 	TEST_ASSERT_TRUE(flashProcessed);
+
+	releaseProtocolData(&pDataFlash);
+
+	uint32_t passedTimeThisDay =
+		11 * (60 * 60 * 1000) +
+		23 * (60 * 1000) +
+		52 * 1000 +
+		997;
+
+	TinyId requestId = {0};
+	if(makeTinyId(0, REQUEST, passedTimeThisDay, requestId) != 0)
+		TEST_FAIL_MESSAGE("Failed to create things tiny ID.");
+
+	uint8_t expectedTinyIdData[] = {0x00, 0x0b, 0x17, 0xd3, 0xe5};
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedTinyIdData, requestId, 5);
+
+	pFlash = createEmptyProtocolByMenmonic(PROTOCOL_FLASH);
+	TEST_ASSERT_EQUAL(0, addByteAttribute(&pFlash, PROTOCOL_FLASH_ATTRIBUTE_REPEAT, 0x05));
+
+	TEST_ASSERT_EQUAL(0, translateLanExecution(requestId, &pFlash, &pDataFlash));
+
+	uint8_t expectedLanExecutionData[] = {
+		0xff,
+			0xf8, 0x03, 0x05, 0x01, 0x01,
+				0x06, 0xfb, 0x00, 0x0b, 0x17, 0xd3, 0xe5, 0xfe,
+				0xf7, 0x01, 0x00, 0x01, 0x00,
+					0x01, 0xfa, 0x05,
+		0xff
+	};
+	TEST_ASSERT_EQUAL(sizeof(expectedLanExecutionData), pDataFlash.dataSize);
+	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedLanExecutionData, pDataFlash.data, sizeof(expectedLanExecutionData));
 }
 
 int main() {

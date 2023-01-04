@@ -21,6 +21,7 @@
 #define TACP_ERROR_INVALID_DAC_STATE -15
 #define TACP_ERROR_LACK_OF_ALLOCATION_PARAMETERS -16
 #define TACP_ERROR_NO_REGISTRATED_PROCESSOR -16
+#define TACP_ERROR_FAILED_TO_ESCAPE -17
 
 #define FLAG_DOC_BEGINNING_END 0xff
 #define FLAG_UNIT_SPLITTER 0xfe
@@ -90,6 +91,7 @@ void releaseProtocolResources(Protocol *protocol);
 void releaseProtocolData(ProtocolData *pData);
 int translateProtocol(Protocol *protocol, ProtocolData *pData);
 int translateAndRelease(Protocol *protocol, ProtocolData *pData);
+int translateLanExecution(TinyId tinyId, Protocol *action, ProtocolData *pData);
 
 void sendAndRelease(uint8_t to[], ProtocolData *pData);
 
@@ -103,7 +105,7 @@ char *getText(Protocol *protocol);
 
 bool isLanAnswer(ProtocolData *pData);
 void createLanResponse(TinyId requestId, ProtocolName protocolName, uint8_t lanResponse[SIZE_LAN_ANSWER]);
-void createLanError(TinyId requestId, ProtocolName protocolName, int8_t errorNumber, uint8_t lanError[SIZE_LAN_ANSWER]);
+void createLanError(TinyId requestId, ProtocolName protocolName, uint8_t errorNumber, uint8_t lanError[SIZE_LAN_ANSWER]);
 bool isLanExecution(ProtocolData *pData);
 int parseLanExecution(ProtocolData *pData, Protocol *action, TinyId requestId);
 int parseInboundProtocol(ProtocolData *pData, Protocol *protocol);

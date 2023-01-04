@@ -7,8 +7,11 @@
 #define MIN_PROTOCOL_DATA_SIZE 2 + 5
 
 static InboundProtocolRegistration *inboundProtocolRegistrations = NULL;
-
 static OutboundProtocolRegistration *outboundProtocolRegistrations = NULL;
+
+static const uint8_t LAN_EXECUTION_PREFIX_BYTES[] = {
+	0xff, 0xf8, 0x03, 0x05, 0x01, 0x01
+};
 
 void copyProtocolDescription(ProtocolDescription *dest, ProtocolDescription *src) {
 	dest->mnemomic = src->mnemomic;
@@ -914,6 +917,55 @@ int translateAndRelease(Protocol *protocol, ProtocolData *pData) {
 	releaseProtocolResources(protocol);
 
 	return result;
+}
+
+int translateLanExecution(TinyId tinyId, Protocol *action, ProtocolData *pData) {
+	ProtocolData pDataAction;
+	int translateActionResult = translateProtocol(action, &pDataAction);
+	if (translateActionResult != 0)
+		return translateActionResult;
+
+	ProtocolData pDataEscapedTinyId;
+	if (escape(tinyId, SIZE_THINGS_TINY_ID, &pDataEscapedTinyId) != 0) {
+		return TACP_ERROR_FAILED_TO_ESCAPE;
+	}
+
+	int pDataActionSize = pDataAction.dataSize - 2;
+	int lanExecutionSize = MIN_PROTOCOL_DATA_SIZE + 3 + pDataEscapedTinyId.dataSize + pDataActionSize;
+	if (lanExecutionSize > MAX_PROTOCOL_DATA_SIZE)
+		return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
+
+	uint8_t leBuff[MAX_PROTOCOL_DATA_SIZE];
+	int lanExecutionPrefixBytesSize = sizeof(LAN_EXECUTION_PREFIX_BYTES);
+	
+	int position = 0;
+	memcpy(leBuff, LAN_EXECUTION_PREFIX_BYTES, lanExecutionPrefixBytesSize);
+	position += lanExecutionPrefixBytesSize;
+
+	leBuff[position] = 0x06;
+	position++;
+	leBuff[position] = FLAG_BYTES_TYPE;
+	position++;
+
+	memcpy(leBuff + position, pDataEscapedTinyId.data, pDataEscapedTinyId.dataSize);
+	position += pDataEscapedTinyId.dataSize;
+
+	leBuff[position] = FLAG_UNIT_SPLITTER;
+	position++;
+
+	memcpy(leBuff + position, pDataAction.data + 1, pDataAction.dataSize - 2);
+	position += pDataAction.dataSize - 2;
+
+	leBuff[position] = FLAG_DOC_BEGINNING_END;
+	
+	pData->data = malloc(sizeof(uint8_t) * (position + 1));
+	if (!pData->data)
+		return TACP_ERROR_OUT_OF_MEMEORY;
+
+	memcpy(pData->data, leBuff, (position + 1));
+	pData->dataSize = position + 1;
+
+	return 0;
 }
 
 ProtocolAttribute *getAttributeByMnemonic(Protocol *protocol, uint8_t mnemonic) {
