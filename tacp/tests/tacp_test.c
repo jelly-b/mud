@@ -16,26 +16,26 @@ struct Flash {
 };
 
 void registerInboundProtocols() {
-	ProtocolName flashProtocolName = {
+	ProtocolName pnFlash = {
 		{0xf7, 0x01},
 		0x00
 	};
-	ProtocolAttributeDescription flashProtocolAttributes[] = {
+	ProtocolAttributeDescription padsFlash[] = {
 		{
 			PROTOCOL_FLASH_ATTRIBUTE_REPEAT,
 			0x01,
 			TYPE_INT
 		}
 	};
-	ProtocolDescription pdFlash = createProtocolDescription(PROTOCOL_FLASH, flashProtocolName,
-		flashProtocolAttributes, 1, false);
+	ProtocolDescription pdFlash = createProtocolDescription(PROTOCOL_FLASH, pnFlash,
+		padsFlash, 1, false);
 	registerInboundProtocol(pdFlash, NULL, false);
 
-	ProtocolName introductionProtocolName = {
+	ProtocolName pnIntroduction = {
 		{0xf8, 0x05},
 		0x00
 	};
-	ProtocolAttributeDescription introductionProtocolAttributes[] = {
+	ProtocolAttributeDescription padsIntroduction[] = {
 		{
 			PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
 			0x02,
@@ -43,7 +43,7 @@ void registerInboundProtocols() {
 		}
 	};
 	ProtocolDescription pdIntroduction = createProtocolDescription(PROTOCOL_INTRODUCTION,
-		introductionProtocolName, introductionProtocolAttributes, 1, true);
+		pnIntroduction, padsIntroduction, 1, true);
 	registerInboundProtocol(pdIntroduction, NULL, false);
 }
 
@@ -69,19 +69,19 @@ void testParseInboundProtocols(void) {
 		0xff
 	};
 
-	ProtocolData flashPData = CREATE_PROTOCOL_DATA(flashData);
-	TEST_ASSERT_TRUE(isInboundProtocol(&flashPData, PROTOCOL_FLASH));
+	ProtocolData pDataFlash = CREATE_PROTOCOL_DATA(flashData);
+	TEST_ASSERT_TRUE(isInboundProtocol(&pDataFlash, PROTOCOL_FLASH));
 
-	Protocol flashProtocol;
-	TEST_ASSERT_EQUAL_INT(0, parseProtocol(&flashPData, &flashProtocol));
-	TEST_ASSERT_EQUAL_INT(1, getAttributesSize(&flashProtocol));
-	TEST_ASSERT_EQUAL_INT(PROTOCOL_FLASH_ATTRIBUTE_REPEAT, flashProtocol.attributes->mnemonic);
+	Protocol flash;
+	TEST_ASSERT_EQUAL_INT(0, parseProtocol(&pDataFlash, &flash));
+	TEST_ASSERT_EQUAL_INT(1, getAttributesSize(&flash));
+	TEST_ASSERT_EQUAL_INT(PROTOCOL_FLASH_ATTRIBUTE_REPEAT, flash.attributes->mnemonic);
 
 	int repeat;
-	TEST_ASSERT_TRUE(getAttributeValueAsInt(&flashProtocol, PROTOCOL_FLASH_ATTRIBUTE_REPEAT, &repeat));
+	TEST_ASSERT_TRUE(getAttributeValueAsInt(&flash, PROTOCOL_FLASH_ATTRIBUTE_REPEAT, &repeat));
 	TEST_ASSERT_EQUAL_INT(5, repeat);
 
-	releaseProtocolResources(&flashProtocol);
+	releaseProtocol(&flash);
 
 	// Introduction
 	uint8_t introductionData[] = {
@@ -92,21 +92,21 @@ void testParseInboundProtocols(void) {
 		0xff
 	};
 
-	ProtocolData introductionPData = CREATE_PROTOCOL_DATA(introductionData);
-	TEST_ASSERT_TRUE(isInboundProtocol(&introductionPData, PROTOCOL_INTRODUCTION));
+	ProtocolData pDataIntroduction = CREATE_PROTOCOL_DATA(introductionData);
+	TEST_ASSERT_TRUE(isInboundProtocol(&pDataIntroduction, PROTOCOL_INTRODUCTION));
 
-	Protocol introductionProtocol;
-	TEST_ASSERT_EQUAL_INT(0, parseProtocol(&introductionPData, &introductionProtocol));
-	TEST_ASSERT_EQUAL_INT(1, getAttributesSize(&introductionProtocol));
-	uint8_t *address = getAttributeValueAsBytes(&introductionProtocol, PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS);
+	Protocol introduction;
+	TEST_ASSERT_EQUAL_INT(0, parseProtocol(&pDataIntroduction, &introduction));
+	TEST_ASSERT_EQUAL_INT(1, getAttributesSize(&introduction));
+	uint8_t *address = getAttributeValueAsBytes(&introduction, PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS);
 	TEST_ASSERT_NOT_NULL(address);
 	uint8_t expectedAddress[] = {0x03, 0xef, 0xee, 0x1f};
 	TEST_ASSERT_EQUAL_UINT8_ARRAY(expectedAddress, address, 4);
 
-	char *thingId = getText(&introductionProtocol);
+	char *thingId = getText(&introduction);
 	TEST_ASSERT_EQUAL_STRING("SL-LE01-C980AFE9", thingId);
 
-	releaseProtocolResources(&introductionProtocol);
+	releaseProtocol(&introduction);
 }
 
 int main() {

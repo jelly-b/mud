@@ -43,14 +43,12 @@ void registerProtocolsConfigurer(void (*configureProtocols)());
 void registerRadioSender(void (*send)(uint8_t address[], uint8_t data[], int dataSize));
 void unregisterThingHooks();
 
-void registerActionProtocol(ProtocolDescription protocolDescription,
+void registerActionProtocol(ProtocolDescription description,
 		uint8_t (*processProtocol)(Protocol *), bool isQueryProtocol);
 bool unregisterActionProtocol(uint8_t mnemomic);
 
 int toBeAThing();
 int processReceivedData(uint8_t data[], int dataSize);
 void sendAndRelease(uint8_t to[], ProtocolData *pData);
-
-uint8_t processLoraDacAllocation(Protocol *protocol);
 
 #endif

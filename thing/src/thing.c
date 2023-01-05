@@ -15,8 +15,11 @@ static void (*send)(uint8_t[], uint8_t[], int) = NULL;
 
 static ThingInfo thingInfo;
 
-static uint8_t messages[MAX_PROTOCOL_DATA_SIZE * 2];
+static uint8_t messages[MAX_SIZE_PROTOCOL_DATA * 2];
 static int messagesLength = 0;
+
+static const uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
+static const uint8_t dacClientAddress[] = {0xef, 0xee, 0x1f};
 
 void registerResetter(void (*_reset)()) {
 	reset = _reset;
@@ -50,9 +53,9 @@ void registerRadioSender(void (*_send)(uint8_t address[], uint8_t data[], int da
 	send = _send;
 }
 
-void registerActionProtocol(ProtocolDescription protocolDescription,
+void registerActionProtocol(ProtocolDescription description,
 			uint8_t (*processProtocol)(Protocol *), bool isQueryProtocol) {
-	registerInboundProtocol(protocolDescription, processProtocol, isQueryProtocol);
+	registerInboundProtocol(description, processProtocol, isQueryProtocol);
 }
 bool unregisterActionProtocol(uint8_t mnemomic) {
 	return unregisterInboundProtocol(mnemomic);
@@ -161,44 +164,40 @@ void sendAndRelease(uint8_t to[], ProtocolData *pData) {
 }
 
 int introduce(char *thingId) {
-	Protocol pIntroduction = createEmptyProtocolByMenmonic(TACP_PROTOCOL_INTRODUCTION);
+	Protocol introduction = createEmptyProtocolByMenmonic(TACP_PROTOCOL_INTRODUCTION);
 
-	uint8_t address[] = {0xef, 0xee, 0x1f};
-	if (addBytesAttribute(&pIntroduction, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
-			address, 3) != 0)
+	if (addBytesAttribute(&introduction, TACP_PROTOCOL_INTRODUCTION_ATTRIBUTE_ADDRESS,
+			dacClientAddress, 3) != 0)
 		return THING_ERROR_SET_PROTOCOL_ATTRIBUTE;
 
-	if (setText(&pIntroduction, thingId) != 0)
+	if (setText(&introduction, thingId) != 0)
 		return THING_ERROR_SET_PROTOCOL_TEXT;
 
-	ProtocolData pData;
-	if (translateAndRelease(&pIntroduction, &pData) != 0)
+	ProtocolData pData = {NULL, 0};
+	if (translateAndRelease(&introduction, &pData) != 0)
 		return THING_ERROR_PROTOCOL_TRANSLATION;
 
 	thingInfo.dacState = INTRODUCTING;
 
-	uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
 	sendAndRelease(dacServiceAddress, &pData);
 
 	return 0;
 }
 
 int isConfigured(char *thingId) {
-	Protocol pIsConfigured = createEmptyProtocolByMenmonic(TACP_PROTOCOL_IS_CONFIGURED);
+	Protocol isConfigured = createEmptyProtocolByMenmonic(TACP_PROTOCOL_IS_CONFIGURED);
 
-	uint8_t address[] ={0xef, 0xee, 0x1f};
-	if(addBytesAttribute(&pIsConfigured, TACP_PROTOCOL_IS_CONFIGURED_ATTRIBUTE_ADDRESS,
-				address, 3) != 0)
+	if(addBytesAttribute(&isConfigured, TACP_PROTOCOL_IS_CONFIGURED_ATTRIBUTE_ADDRESS,
+				dacClientAddress, 3) != 0)
 		return THING_ERROR_SET_PROTOCOL_ATTRIBUTE;
 
-	if(setText(&pIsConfigured, thingId) != 0)
+	if(setText(&isConfigured, thingId) != 0)
 		return THING_ERROR_SET_PROTOCOL_TEXT;
 
-	ProtocolData pData;
-	if(translateAndRelease(&pIsConfigured, &pData) != 0)
+	ProtocolData pData = {NULL, 0};
+	if(translateAndRelease(&isConfigured, &pData) != 0)
 		return THING_ERROR_PROTOCOL_TRANSLATION;
-
-	uint8_t dacServiceAddress[] = {0xef, 0xef, 0x1f};
+	
 	sendAndRelease(dacServiceAddress, &pData);
 
 	return 0;
@@ -218,8 +217,7 @@ bool checkHooks() {
 }
 
 int doDac() {
-	uint8_t initialAddress[] = {0xef, 0xee, 0x1f};
-	configureRadio(initialAddress);
+	configureRadio(dacClientAddress);
 
 	registerLoraDacProtocols();
 
@@ -291,23 +289,64 @@ int findProtocolEndPosition(int startPosition) {
 	return -1;
 }
 
+InboundProtocolRegistration *getInboiundProtoclRegistrationByMnemonic(uint8_t mnemonic) {
+	ProtocolName name;
+	if(!getInboundProtocolNameByMnemonic(mnemonic, &name))
+		return TACP_ERROR_UNKNOWN_PROTOCOL_MNEMONIC;
+
+	return getInboundProtocolRegistrationByName(name);
+}
+
 int processProtocol(int protocolStartPosition, int protocolEndPosition) {
 	ProtocolData pData = {messages + protocolStartPosition, (protocolEndPosition - protocolStartPosition + 1)};
 	if (isLanExecution(&pData)) {
-		
-	} else {
-		Protocol protocol;
-		int parseResult = parseProtocol(&pData,&protocol);
-		if (parseResult != 0) {
-			releaseProtocolResources(&protocol);
-			return parseResult;
+		TinyId requestId;
+		Protocol action = createEmptyProtocol();
+		int result = parseLanExecution(&pData, requestId, &action);
+		if(result != 0) {
+			releaseProtocol(&action);
+			return TACP_ERROR_FAILED_TO_PARSE_PROTOCOL;
 		}
 
-		ProtocolName name;
-		if(!getInboundProtocolNameByMnemonic(protocol.mnemonic, &name))
-			return TACP_ERROR_UNKNOWN_PROTOCOL_MNEMONIC;
+		InboundProtocolRegistration *registration = getInboiundProtoclRegistrationByMnemonic(action.mnemonic);
+		if(!registration)
+			return TACP_ERROR_UNKNOWN_PROTOCOL_NAME;
 
-		InboundProtocolRegistration *registration = getInboundProtocolRegistrationByName(name);
+		if(!registration->processProtocol) {
+			return TACP_ERROR_NO_REGISTRATED_PROCESSOR;
+		}
+
+		uint8_t errorNumber = registration->processProtocol(&action);
+		if (registration->isQueryProtocol)
+			return 0;
+
+		ProtocolData pData = {NULL, 0};
+		if (errorNumber == 0) {
+			LanAnswer answer = createLanResonse(requestId);
+			if (translateLanAnswer(&answer, &pData) != 0) {
+				releaseProtocolData(&pData);
+				return TACP_ERROR_FAILED_TO_TRANSLATE_ANSWER;
+			}
+		} else {
+			LanAnswer answer = createLanError(requestId, errorNumber);
+
+			if(translateLanAnswer(&answer, &pData) != 0) {
+				releaseProtocolData(&pData);
+				return TACP_ERROR_FAILED_TO_TRANSLATE_ANSWER;
+			}
+		}
+
+		sendAndRelease(thingInfo.gatewayUplinkAddress, &pData);
+		return 0;
+	} else {
+		Protocol protocol;
+		int result = parseProtocol(&pData, &protocol);
+		if (result != 0) {
+			releaseProtocol(&protocol);
+			return result;
+		}
+
+		InboundProtocolRegistration *registration = getInboiundProtoclRegistrationByMnemonic(protocol.mnemonic);
 		if (!registration)
 			return TACP_ERROR_UNKNOWN_PROTOCOL_NAME;
 
@@ -326,21 +365,31 @@ int processProtocol(int protocolStartPosition, int protocolEndPosition) {
 
 int processMessage() {
 	int protocolStartPosition = findProtocolStartPosition();
-	if (protocolStartPosition == -1)
-		return;
+	if (protocolStartPosition == -1) {
+		cleanMessages();
+		return TACP_ERROR_ABANDON_MALFORMED_DATA;
+	}
 
 	int protocolEndPosition = findProtocolEndPosition(protocolStartPosition);
 	if (protocolEndPosition == -1)
-		return;
+		return TACP_ERROR_WAITING_DATA;
 
-	return processProtocol(protocolStartPosition, protocolEndPosition);
+	int result = processProtocol(protocolStartPosition, protocolEndPosition);
+	if(protocolEndPosition == messagesLength - 1) {
+		cleanMessages();
+	} else {
+		messagesLength = messagesLength - (protocolEndPosition + 1);
+		memcpy(messages, messages + protocolEndPosition + 1, messagesLength);
+	}
+
+	return result;
 }
 
 int processAsAThing(uint8_t data[], int dataSize) {
-	if (dataSize > MAX_PROTOCOL_DATA_SIZE * 2)
+	if (dataSize > MAX_SIZE_PROTOCOL_DATA * 2)
 		return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
-	if (messagesLength + dataSize > MAX_PROTOCOL_DATA_SIZE * 2) {
+	if (messagesLength + dataSize > MAX_SIZE_PROTOCOL_DATA * 2) {
 		cleanMessages();
 	}
 	addMessage(data, dataSize);
@@ -362,26 +411,25 @@ int allocated(uint8_t *gatewayUplinkAddress, uint8_t *gatewayDownlinkAddress,
 
 	saveThingInfo(&thingInfo);
 
-	Protocol pAllocated = createEmptyProtocolByMenmonic(TACP_PROTOCOL_ALLOCATED);
-	setText(&pAllocated, thingInfo.thingId);
+	Protocol allocated = createEmptyProtocolByMenmonic(TACP_PROTOCOL_ALLOCATED);
+	setText(&allocated, thingInfo.thingId);
 
-	ProtocolData pDataAllocated;
-	int translateResult = translateAndRelease(&pAllocated, &pDataAllocated);
-	if(translateResult != 0) {
-		releaseProtocolData(&pDataAllocated);
-		return translateResult;
+	ProtocolData pData = {NULL, 0};
+	int result = translateAndRelease(&allocated, &pData);
+	if(result != 0) {
+		releaseProtocolData(&pData);
+		return TACP_ERROR_FAILED_TO_TRANSLATE_PROTOCOL;
 	}
 
-	uint8_t aDacServiceAddress[] = {0xef, 0xef, 0x1f};
-	sendAndRelease(aDacServiceAddress, &pDataAllocated);
+	sendAndRelease(dacServiceAddress, &pData);
 
 	return 0;
 }
 
-int processAllocation(Protocol *pAllocation) {
-	uint8_t *gatewayUplinkAddress = getAttributeValueAsBytes(pAllocation, TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS);
-	uint8_t *gatewayDownlinkAddress = getAttributeValueAsBytes(pAllocation, TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS);
-	uint8_t *allocatedAddress = getAttributeValueAsBytes(pAllocation, TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS);
+int processAllocation(Protocol *allocation) {
+	uint8_t *gatewayUplinkAddress = getAttributeValueAsBytes(allocation, TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_UPLINK_ADDRESS);
+	uint8_t *gatewayDownlinkAddress = getAttributeValueAsBytes(allocation, TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_GATEWAY_DOWNLINK_ADDRESS);
+	uint8_t *allocatedAddress = getAttributeValueAsBytes(allocation, TACP_PROTOCOL_ALLOCATION_ATTRIBUTE_ALLOCATED_ADDRESS);
 
 	if (!gatewayUplinkAddress || !gatewayDownlinkAddress || !allocatedAddress)
 		return TACP_ERROR_LACK_OF_ALLOCATION_PARAMETERS;
@@ -422,23 +470,28 @@ int processDac(uint8_t data[], int dataSize) {
 			return TACP_ERROR_INVALID_DAC_STATE;
 		}
 
-		Protocol pAllocation = createEmptyProtocol();
+		Protocol allocation = createEmptyProtocol();
 
-		int parseResult = parseProtocol(&pData, &pAllocation);
-		if (parseResult != 0)
-			return parseResult;
+		int result = parseProtocol(&pData, &allocation);
+		if (result != 0) {
+			releaseProtocolData(&pData);
+			return TACP_ERROR_FAILED_TO_PARSE_PROTOCOL;
+		}
 
-		processAllocation(&pAllocation);
-		releaseProtocolResources(&pAllocation);
+		processAllocation(&allocation);
+		releaseProtocol(&allocation);
 	} else if (thingInfo.dacState == ALLOCATED) {
 		if (isInboundProtocol(&pData, TACP_PROTOCOL_NOT_CONFIGURED)) {
-			Protocol pNotConfigured = createEmptyProtocol();
+			Protocol notConfigured = createEmptyProtocol();
 
-			int parseResult = parseProtocol(&pData, &pNotConfigured);
-			if(parseResult != 0)
-				return parseResult;
+			int result = parseProtocol(&pData, &notConfigured);
+			if(result != 0) {
+				releaseProtocolData(&pData);
+				return TACP_ERROR_FAILED_TO_PARSE_PROTOCOL;
 
-			releaseProtocolResources(&pNotConfigured);
+			}
+
+			releaseProtocol(&notConfigured);
 			processNotConfigured();
 		} else if (isInboundProtocol(&pData, TACP_PROTOCOL_CONFIGURED)) {
 			processConfigured();

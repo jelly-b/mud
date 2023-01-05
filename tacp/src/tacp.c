@@ -4,14 +4,23 @@
 
 #include "tacp.h"
 
-#define MIN_PROTOCOL_DATA_SIZE 2 + 5
+#define MIN_SIZE_PROTOCOL_DATA 2 + 5
+#define MIN_SIZE_LAN_EXECUTION_DATA MIN_SIZE_PROTOCOL_DATA + (SIZE_THINGS_TINY_ID + 2) + 5
+#define SIZE_LAN_RESPONSE_DATA 2 + 5 + 1 + 1 + SIZE_THINGS_TINY_ID
+#define SIZE_LAN_ERROR_DATA 2 + 5 + 1 + 1 + SIZE_THINGS_TINY_ID + 1 + 1 + 1
 
 static InboundProtocolRegistration *inboundProtocolRegistrations = NULL;
 static OutboundProtocolRegistration *outboundProtocolRegistrations = NULL;
 
-static const uint8_t LAN_EXECUTION_PREFIX_BYTES[] = {
+static const uint8_t LAN_EXECUTION_PREFIX_BYTES[] ={
 	0xff, 0xf8, 0x03, 0x05, 0x01, 0x01
 };
+static const int SIZE_LAN_EXECUTION_PREFIX_BYTES = sizeof(LAN_EXECUTION_PREFIX_BYTES);
+
+static const uint8_t LAN_ANSWER_PREFIX_BYTES[] = {
+	0xff, 0xf8, 0x00, 0x07, 0x02, 0x00
+};
+static const int SIZE_LAN_ANSWER_PREFIX_BYTES = sizeof(LAN_ANSWER_PREFIX_BYTES);
 
 void copyProtocolDescription(ProtocolDescription *dest, ProtocolDescription *src) {
 	dest->mnemomic = src->mnemomic;
@@ -63,7 +72,7 @@ int addBytesAttribute(Protocol *protocol, uint8_t mnemonic, uint8_t bytes[], int
 	if (protocol->text)
 		return TACP_ERROR_CHANGE_CLOSED;
 
-	if (size > MAX_ATTRIBUTE_DATA_SIZE)
+	if (size > MAX_SIZE_ATTRIBUTE_DATA)
 		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 	ProtocolAttribute *attribute = malloc(sizeof(ProtocolAttribute));
@@ -86,7 +95,7 @@ int addStringAttribute(Protocol *protocol, uint8_t mnemonic, char string[]) {
 		return TACP_ERROR_CHANGE_CLOSED;
 
 	int length = strlen(string);
-	if (length > MAX_ATTRIBUTE_DATA_SIZE)
+	if (length > MAX_SIZE_ATTRIBUTE_DATA)
 		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 	ProtocolAttribute *attribute = malloc(sizeof(ProtocolAttribute));
@@ -149,7 +158,7 @@ int setText(Protocol *protocol, char *text) {
 	if(protocol->text)
 		return TACP_ERROR_CHANGE_CLOSED;
 
-	if (strlen(text) > MAX_TEXT_DATA_SIZE)
+	if (strlen(text) > MAX_SIZE_TEXT_DATA)
 		return TACP_ERROR_TEXT_DATA_TOO_LARGE;
 
 	protocol->text = (char *)malloc(strlen(text) + 1);
@@ -188,20 +197,20 @@ ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName nam
 	return pd;
 }
 
-void registerInboundProtocol(ProtocolDescription protocolDescription,
+void registerInboundProtocol(ProtocolDescription description,
 		uint8_t (*processProtocol)(Protocol *), bool isQueryProtocol) {
 	InboundProtocolRegistration *newestRegistration = malloc(sizeof(InboundProtocolRegistration));
-	newestRegistration->description.mnemomic = protocolDescription.mnemomic;
-	newestRegistration->description.name = protocolDescription.name;
+	newestRegistration->description.mnemomic = description.mnemomic;
+	newestRegistration->description.name = description.name;
 
-	newestRegistration->description.attributes = malloc(sizeof(ProtocolAttributeDescription) * protocolDescription.attributesSize);
-	for(int i = 0; i < protocolDescription.attributesSize; i++) {
+	newestRegistration->description.attributes = malloc(sizeof(ProtocolAttributeDescription) * description.attributesSize);
+	for(int i = 0; i < description.attributesSize; i++) {
 		ProtocolAttributeDescription *pad = (newestRegistration->description.attributes) + i;
-		pad->mnemonic = ((protocolDescription.attributes) + i)->mnemonic;
-		pad->name = ((protocolDescription.attributes) + i)->name;
-		pad->dataType = ((protocolDescription.attributes) + i)->dataType;
+		pad->mnemonic = ((description.attributes) + i)->mnemonic;
+		pad->name = ((description.attributes) + i)->name;
+		pad->dataType = ((description.attributes) + i)->dataType;
 	}
-	newestRegistration->description.attributesSize = protocolDescription.attributesSize;
+	newestRegistration->description.attributesSize = description.attributesSize;
 
 	newestRegistration->processProtocol = processProtocol;
 	newestRegistration->isQueryProtocol = isQueryProtocol;
@@ -245,19 +254,19 @@ bool unregisterInboundProtocol(uint8_t mnemomic) {
 	return false;
 }
 
-void registerOutboundProtocol(ProtocolDescription protocolDescription) {
+void registerOutboundProtocol(ProtocolDescription description) {
 	OutboundProtocolRegistration *newestRegistration = malloc(sizeof(OutboundProtocolRegistration));
-	newestRegistration->description.mnemomic = protocolDescription.mnemomic;
-	newestRegistration->description.name = protocolDescription.name;
+	newestRegistration->description.mnemomic = description.mnemomic;
+	newestRegistration->description.name = description.name;
 
-	newestRegistration->description.attributes = malloc(sizeof(ProtocolAttributeDescription) * protocolDescription.attributesSize);
-	for (int i = 0; i < protocolDescription.attributesSize; i++) {
+	newestRegistration->description.attributes = malloc(sizeof(ProtocolAttributeDescription) * description.attributesSize);
+	for (int i = 0; i < description.attributesSize; i++) {
 		ProtocolAttributeDescription *pad = (newestRegistration->description.attributes) + i;
-		pad->mnemonic = ((protocolDescription.attributes) + i)->mnemonic;
-		pad->name = ((protocolDescription.attributes) + i)->name;
-		pad->dataType = ((protocolDescription.attributes) + i)->dataType;
+		pad->mnemonic = ((description.attributes) + i)->mnemonic;
+		pad->name = ((description.attributes) + i)->name;
+		pad->dataType = ((description.attributes) + i)->dataType;
 	}
-	newestRegistration->description.attributesSize = protocolDescription.attributesSize;
+	newestRegistration->description.attributesSize = description.attributesSize;
 	newestRegistration->next = NULL;
 
 	if (outboundProtocolRegistrations) {
@@ -299,13 +308,13 @@ bool unregisterOutboundProtocol(uint8_t mnemomic) {
 }
 
 int escape(uint8_t data[], int size, ProtocolData *pData) {
-	if (size > MAX_ATTRIBUTE_DATA_SIZE)
+	if (size > MAX_SIZE_ATTRIBUTE_DATA)
 		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 	int position = 0;
-	uint8_t buff[MAX_ATTRIBUTE_DATA_SIZE];
+	uint8_t buff[MAX_SIZE_ATTRIBUTE_DATA];
 	for (int i = 0; i < size; i++) {
-		if (position > MAX_ATTRIBUTE_DATA_SIZE)
+		if (position > MAX_SIZE_ATTRIBUTE_DATA)
 			return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 		if (data[i] == FLAG_DOC_BEGINNING_END ||
@@ -356,11 +365,11 @@ bool isEscapedByte(uint8_t b) {
 }
 
 int unescape(uint8_t data[], int size, ProtocolData *pData) {
-	if (size > MAX_TEXT_DATA_SIZE)
+	if (size > MAX_SIZE_TEXT_DATA)
 		return TACP_ERROR_ATTRIBUTE_DATA_TOO_LARGE;
 
 	int position = 0;
-	uint8_t buff[MAX_TEXT_DATA_SIZE];
+	uint8_t buff[MAX_SIZE_TEXT_DATA];
 	for (int i = 0; i < size; i++) {
 		if (data[i] == FLAG_ESCAPE && i < (size - 1) && isEscapedByte(data[i + 1])) {
 			continue;
@@ -412,12 +421,8 @@ int unescape(uint8_t data[], int size, ProtocolData *pData) {
 	return 0;
 }
 
-uint8_t getProtocolMnemonic(ProtocolData *pData) {
-	return -1;
-}
-
 bool isValidProtocolData(ProtocolData *pData) {
-	if (pData->dataSize < MIN_PROTOCOL_DATA_SIZE)
+	if (pData->dataSize < MIN_SIZE_PROTOCOL_DATA)
 		return false;
 
 	if (pData->data[0] != 0xff || pData->data[pData->dataSize - 1] != 0xff)
@@ -717,15 +722,15 @@ int doParseProtocol(ProtocolData *pData, Protocol *protocol) {
 	return 0;
 }
 
-int8_t parseProtocol(ProtocolData *pData, Protocol *protocol) {
+int parseProtocol(ProtocolData *pData, Protocol *protocol) {
 	int result = doParseProtocol(pData, protocol);
 	if (result != 0)
-		releaseProtocolResources(protocol);
+		releaseProtocol(protocol);
 
 	return result;
 }
 
-void releaseProtocolResources(Protocol *protocol) {
+void releaseProtocol(Protocol *protocol) {
 	if (protocol->text) {
 		free(protocol->text);
 		protocol->text = NULL;
@@ -773,7 +778,7 @@ void releaseProtocolData(ProtocolData *pData) {
 }
 
 int translateProtocol(Protocol *protocol, ProtocolData *pData) {
-	if (getAttributesSize(protocol) > MAX_ATTRIBUTES_SIZE)
+	if (getAttributesSize(protocol) > MAX_SIZE_ATTRIBUTES)
 		return TACP_ERROR_TOO_MANY_ATTRIBUTES;
 
 	ProtocolDescription *description = getOutboundProtocolDescriptionByMnemonic(protocol->mnemonic);
@@ -783,7 +788,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 	if (!description->acceptText && protocol->text)
 		return TACP_ERROR_TEXT_NOT_ACCEPTED;
 
-	uint8_t buff[MAX_PROTOCOL_DATA_SIZE];
+	uint8_t buff[MAX_SIZE_PROTOCOL_DATA];
 	buff[0] = 0xff;
 	buff[1] = description->name.namespace[0];
 	buff[2] = description->name.namespace[1];
@@ -801,13 +806,13 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		if (!attributeDescription)
 			return TACP_ERROR_UNKNOWN_PROTOCOL_ATTRIBUTE_MNEMONIC;
 
-		if (position >= MAX_PROTOCOL_DATA_SIZE - 1)
+		if (position >= MAX_SIZE_PROTOCOL_DATA - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
 		buff[position] = attributeDescription->name;
 		position++;
 
-		if(position >= MAX_PROTOCOL_DATA_SIZE - 1)
+		if(position >= MAX_SIZE_PROTOCOL_DATA - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
 		ProtocolData attributeData;
@@ -852,12 +857,12 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 			// NOOP
 		}
 
-		if (position >= MAX_PROTOCOL_DATA_SIZE - 1) {
+		if (position >= MAX_SIZE_PROTOCOL_DATA - 1) {
 			releaseProtocolData(&attributeData);
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
 
-		if (position + attributeData.dataSize >= MAX_PROTOCOL_DATA_SIZE - 1) {
+		if (position + attributeData.dataSize >= MAX_SIZE_PROTOCOL_DATA - 1) {
 			releaseProtocolData(&attributeData);
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
@@ -868,7 +873,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		buff[position] = FLAG_UNIT_SPLITTER;
 		position++;
 		
-		if (position >= MAX_PROTOCOL_DATA_SIZE - 1) {
+		if (position >= MAX_SIZE_PROTOCOL_DATA - 1) {
 			releaseProtocolData(&attributeData);
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 		}
@@ -880,7 +885,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 
 	if (protocol->text) {
 		int textSize = strlen(protocol->text);
-		if (position + textSize >= MAX_PROTOCOL_DATA_SIZE - 1)
+		if (position + textSize >= MAX_SIZE_PROTOCOL_DATA - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
 		memcpy(buff + position, protocol->text, textSize);
@@ -892,7 +897,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 		buff[position - 1] = FLAG_DOC_BEGINNING_END;
 		dataSize = position;
 	} else {
-		if (position >= MAX_PROTOCOL_DATA_SIZE - 1)
+		if (position >= MAX_SIZE_PROTOCOL_DATA - 1)
 			return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
 		buff[position] = FLAG_DOC_BEGINNING_END;
@@ -914,7 +919,7 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 
 int translateAndRelease(Protocol *protocol, ProtocolData *pData) {
 	int result = translateProtocol(protocol, pData);
-	releaseProtocolResources(protocol);
+	releaseProtocol(protocol);
 
 	return result;
 }
@@ -923,7 +928,7 @@ int translateLanExecution(TinyId tinyId, Protocol *action, ProtocolData *pData) 
 	ProtocolData pDataAction;
 	int translateActionResult = translateProtocol(action, &pDataAction);
 	if (translateActionResult != 0)
-		return translateActionResult;
+		return TACP_ERROR_FAILED_TO_TRANSLATE_PROTOCOL;
 
 	ProtocolData pDataEscapedTinyId;
 	if (escape(tinyId, SIZE_THINGS_TINY_ID, &pDataEscapedTinyId) != 0) {
@@ -931,16 +936,15 @@ int translateLanExecution(TinyId tinyId, Protocol *action, ProtocolData *pData) 
 	}
 
 	int pDataActionSize = pDataAction.dataSize - 2;
-	int lanExecutionSize = MIN_PROTOCOL_DATA_SIZE + 3 + pDataEscapedTinyId.dataSize + pDataActionSize;
-	if (lanExecutionSize > MAX_PROTOCOL_DATA_SIZE)
+	int lanExecutionSize = MIN_SIZE_PROTOCOL_DATA + 3 + pDataEscapedTinyId.dataSize + pDataActionSize;
+	if (lanExecutionSize > MAX_SIZE_PROTOCOL_DATA)
 		return TACP_ERROR_PROTOCOL_DATA_TOO_LARGE;
 
-	uint8_t leBuff[MAX_PROTOCOL_DATA_SIZE];
-	int lanExecutionPrefixBytesSize = sizeof(LAN_EXECUTION_PREFIX_BYTES);
+	uint8_t leBuff[MAX_SIZE_PROTOCOL_DATA];
 	
 	int position = 0;
-	memcpy(leBuff, LAN_EXECUTION_PREFIX_BYTES, lanExecutionPrefixBytesSize);
-	position += lanExecutionPrefixBytesSize;
+	memcpy(leBuff, LAN_EXECUTION_PREFIX_BYTES, SIZE_LAN_EXECUTION_PREFIX_BYTES);
+	position += SIZE_LAN_EXECUTION_PREFIX_BYTES;
 
 	leBuff[position] = 0x06;
 	position++;
@@ -1028,31 +1032,137 @@ char *getText(Protocol *protocol) {
 }
 
 bool isLanAnswer(ProtocolData *pData) {
-	return false;
+	if(!isValidProtocolData(pData))
+		return false;
+
+	return pData->data[1] == 0xf8 &&
+		pData->data[2] == 0x00 &&
+		pData->data[3] == 0x07;
 }
 
-void createLanResponse(TinyId requestId, ProtocolName protocolName,
-		uint8_t lanResponse[SIZE_LAN_ANSWER]) {
+LanAnswer createLanResonse(TinyId requestId) {
+	LanAnswer answer;
+	makeResponseTinyId(requestId, answer.traceId);
+	answer.errorNumber = 0;
+
+	return answer;
 }
 
-void createLanError(TinyId requestId, ProtocolName protocolName,
-		int8_t errorNumber, uint8_t lanError[SIZE_LAN_ANSWER]) {
+LanAnswer createLanError(TinyId requestId, uint8_t errorNumber) {
+	LanAnswer answer;
+	makeErrorTinyId(requestId, answer.traceId);
+	answer.errorNumber = errorNumber;
+
+	return answer;
 }
 
 bool isLanExecution(ProtocolData *pData) {
-	return false;
+	if(!isValidProtocolData(pData))
+		return false;
+
+	return pData->data[1] == 0xf8 &&
+		pData->data[2] == 0x03 &&
+		pData->data[3] == 0x05;
 }
 
-int parseLanExecution(ProtocolData *pData, Protocol *action, TinyId tinyId) {
+int parseLanAnswer(ProtocolData *pData, LanAnswer *lanAnswer) {
 	return -1;
 }
 
-int translateLanExecutionResponse(TinyId requestId, uint8_t *data) {
-	return -1;
+int translateLanAnswer(LanAnswer *answer, ProtocolData *pData) {
+	if (isResponseTinyId(answer->traceId)) {
+		uint8_t buff[SIZE_LAN_RESPONSE_DATA];
+
+		int position = 0;
+		buff[position] = 0xff;
+		memcpy(buff + 1, LAN_ANSWER_PREFIX_BYTES, sizeof(LAN_ANSWER_PREFIX_BYTES));
+		position += SIZE_LAN_ANSWER_PREFIX_BYTES;
+
+		buff[position] = 0x06;
+		position++;
+		
+		buff[position] = FLAG_BYTES_TYPE;
+		position++;
+		memcpy(buff + position, answer->traceId, SIZE_THINGS_TINY_ID);
+		position += SIZE_THINGS_TINY_ID;
+
+		buff[position] = 0xff;
+
+		pData->data = malloc(sizeof(uint8_t) * SIZE_LAN_RESPONSE_DATA);
+		if (!pData->data)
+			return TACP_ERROR_OUT_OF_MEMEORY;
+
+		memcpy(pData->data, buff, SIZE_LAN_RESPONSE_DATA);
+		pData->dataSize = SIZE_LAN_RESPONSE_DATA;
+
+		return 0;
+	} else if (isErrorTinyId(answer->traceId)) {
+		uint8_t buff[SIZE_LAN_ERROR_DATA];
+
+		int position = 0;
+		memcpy(buff, LAN_ANSWER_PREFIX_BYTES, sizeof(LAN_ANSWER_PREFIX_BYTES));
+		position += SIZE_LAN_ANSWER_PREFIX_BYTES;
+
+		buff[position] = 0x06;
+		position++;
+
+		buff[position] = FLAG_BYTES_TYPE;
+		position++;
+		memcpy(buff + position, answer->traceId, SIZE_THINGS_TINY_ID);
+		position += SIZE_THINGS_TINY_ID;
+
+		buff[position] = 0x08;
+		position++;
+
+		buff[position] = FLAG_BYTE_TYPE;
+		position++;
+		buff[position] = answer->errorNumber;
+		position++;
+
+		buff[position] = 0xff;
+
+		pData->data = malloc(sizeof(uint8_t) * SIZE_LAN_ERROR_DATA);
+		if(!pData->data)
+			return TACP_ERROR_OUT_OF_MEMEORY;
+
+		memcpy(pData->data, buff, SIZE_LAN_ERROR_DATA);
+		pData->dataSize = SIZE_LAN_ERROR_DATA;
+
+		return 0;
+	} else {
+		return TACP_ERROR_UNKNOWN_ANSWER_TINY_ID_TYPE;
+	}
 }
 
-int translateLanExecutionError(TinyId requestId, int8_t errorNumber, uint8_t *data) {
-	return -1;
+int parseLanExecution(ProtocolData *pData, TinyId requestId, Protocol *action) {
+	if (!isLanExecution(pData) || pData->dataSize < MIN_SIZE_LAN_EXECUTION_DATA)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	uint8_t attributeSize = pData->data[4];
+	uint8_t childrenSize = pData->data[5] & 0x7f;
+	bool hasText = (pData->data[5] & 0x80) == 0x80;
+
+	if (attributeSize != 1 || childrenSize != 1 || hasText)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	int requestIdStartPosition = 1 + 5 + 1 + 1;
+	memcpy(requestId, pData->data + requestIdStartPosition, SIZE_THINGS_TINY_ID);
+
+	int actionStartPosition = requestIdStartPosition + SIZE_THINGS_TINY_ID + 1;
+	uint8_t actionBuff[MAX_SIZE_PROTOCOL_DATA];
+	int actionDataSize = pData->dataSize - actionStartPosition - 1;
+	memcpy(actionBuff + 1, pData->data + actionStartPosition, actionDataSize);
+	actionBuff[0] = 0xff;
+	actionBuff[actionDataSize + 1] = 0xff;
+
+	ProtocolData pDataAction = {actionBuff, actionDataSize + 2};
+	int parseActionResult = parseProtocol(&pDataAction, action);
+	if(parseActionResult != 0) {
+		releaseProtocol(action);
+		return parseActionResult;
+	}
+
+	return 0;
 }
 
 int translateLanNotify(struct Protocol *event, uint8_t *data) {

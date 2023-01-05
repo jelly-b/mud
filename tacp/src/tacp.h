@@ -22,6 +22,13 @@
 #define TACP_ERROR_LACK_OF_ALLOCATION_PARAMETERS -16
 #define TACP_ERROR_NO_REGISTRATED_PROCESSOR -16
 #define TACP_ERROR_FAILED_TO_ESCAPE -17
+#define TACP_ERROR_FAILED_TO_TRANSLATE_PROTOCOL -18
+#define TACP_ERROR_FAILED_TO_PARSE_PROTOCOL -19
+#define TACP_ERROR_ABANDON_MALFORMED_DATA -20
+#define TACP_ERROR_WAITING_DATA -21
+#define TACP_ERROR_FAILED_TO_MAKE_ANSWER -22
+#define TACP_ERROR_FAILED_TO_TRANSLATE_ANSWER -23
+#define TACP_ERROR_UNKNOWN_ANSWER_TINY_ID_TYPE -24
 
 #define FLAG_DOC_BEGINNING_END 0xff
 #define FLAG_UNIT_SPLITTER 0xfe
@@ -31,14 +38,14 @@
 #define FLAG_BYTE_TYPE 0xfa
 
 #define SIZE_LAN_ANSWER SIZE_THINGS_TINY_ID + sizeof(uint8_t)
-#define MAX_PROTOCOL_DATA_SIZE 128
-#define MAX_ATTRIBUTE_DATA_SIZE 16
-#define MAX_TEXT_DATA_SIZE 32
-#define MAX_ATTRIBUTES_SIZE 16
+#define MAX_SIZE_PROTOCOL_DATA 128
+#define MAX_SIZE_ATTRIBUTE_DATA 16
+#define MAX_SIZE_TEXT_DATA 32
+#define MAX_SIZE_ATTRIBUTES 16
 
 typedef struct LanAnwser {
-	TinyId requestId;
-	int8_t errorNumber;
+	TinyId traceId;
+	uint8_t errorNumber;
 } LanAnswer;
 
 typedef struct InboundProtocolRegistration {
@@ -78,20 +85,19 @@ int addBytesAttribute(Protocol *protocol, uint8_t mnemonic, uint8_t bytes[], int
 int addStringAttribute(Protocol *protocol, uint8_t mnemonic, char string[]);
 int setText(Protocol *protocol, char *text);
 
-void registerInboundProtocol(ProtocolDescription protocolDescription,
-		uint8_t (*processProtocol)(Protocol *), bool isQueryProtocol);
+void registerInboundProtocol(ProtocolDescription description,
+	uint8_t (*processProtocol)(Protocol *), bool isQueryProtocol);
 bool unregisterInboundProtocol(uint8_t mnemomic);
-void registerOutboundProtocol(ProtocolDescription protocolDescription);
+void registerOutboundProtocol(ProtocolDescription description);
 bool unregisterOutboundProtocol(uint8_t mnemomic);
 
-uint8_t getProtocolMnemonic(ProtocolData *pData);
 bool isInboundProtocol(ProtocolData *pData, uint8_t mnemonic);
-int8_t parseProtocol(ProtocolData *pData, Protocol *protocol);
-void releaseProtocolResources(Protocol *protocol);
+int parseProtocol(ProtocolData *pData, Protocol *protocol);
+void releaseProtocol(Protocol *protocol);
 void releaseProtocolData(ProtocolData *pData);
 int translateProtocol(Protocol *protocol, ProtocolData *pData);
 int translateAndRelease(Protocol *protocol, ProtocolData *pData);
-int translateLanExecution(TinyId tinyId, Protocol *action, ProtocolData *pData);
+int translateLanExecution(TinyId requestId, Protocol *action, ProtocolData *pData);
 
 void sendAndRelease(uint8_t to[], ProtocolData *pData);
 
@@ -104,11 +110,14 @@ bool getAttributeValueAsFloat(Protocol *protocol, uint8_t mnemonic, float *value
 char *getText(Protocol *protocol);
 
 bool isLanAnswer(ProtocolData *pData);
-void createLanResponse(TinyId requestId, ProtocolName protocolName, uint8_t lanResponse[SIZE_LAN_ANSWER]);
-void createLanError(TinyId requestId, ProtocolName protocolName, uint8_t errorNumber, uint8_t lanError[SIZE_LAN_ANSWER]);
+LanAnswer createLanResonse(TinyId requestId);
+LanAnswer createLanError(TinyId requestId, uint8_t errorNumber);
+int parseLanAnswer(ProtocolData *pData, LanAnswer *lanAnswer);
+int translateLanAnswer(LanAnswer *answer, ProtocolData *pData);
+
 bool isLanExecution(ProtocolData *pData);
-int parseLanExecution(ProtocolData *pData, Protocol *action, TinyId requestId);
-int parseInboundProtocol(ProtocolData *pData, Protocol *protocol);
+int parseLanExecution(ProtocolData *pData, TinyId requestId, Protocol *action);
+int parseProtocol(ProtocolData *pData, Protocol *protocol);
 int translateLanNotification(Protocol *event, uint8_t *data);
 InboundProtocolRegistration *getInboundProtocolRegistrationByName(ProtocolName name);
 

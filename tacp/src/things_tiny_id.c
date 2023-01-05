@@ -137,7 +137,7 @@ int makeAnswerTinyId(const TinyId requestId, MessageType messageType, TinyId ans
 
 	answerId[0] = requestId[0];
 
-	uint8_t hours = requestId[1] & 0X3f;
+	uint8_t hours = requestId[1] & 0x3f;
 	answerId[1] = (messageType << 6) | hours;
 
 	answerId[2] = requestId[2];
