@@ -6,8 +6,8 @@
 
 #define MIN_SIZE_PROTOCOL_DATA 2 + 5
 #define MIN_SIZE_LAN_EXECUTION_DATA MIN_SIZE_PROTOCOL_DATA + (SIZE_THINGS_TINY_ID + 2) + 5
-#define SIZE_LAN_RESPONSE_DATA 2 + 5 + 1 + 1 + SIZE_THINGS_TINY_ID
-#define SIZE_LAN_ERROR_DATA 2 + 5 + 1 + 1 + SIZE_THINGS_TINY_ID + 1 + 1 + 1
+#define MIN_SIZE_LAN_RESPONSE_DATA 2 + 5 + 1 + 1 + SIZE_THINGS_TINY_ID
+#define MIN_SIZE_LAN_ERROR_DATA 2 + 5 + 1 + 1 + SIZE_THINGS_TINY_ID + 1 + 2 + 1
 
 static InboundProtocolRegistration *inboundProtocolRegistrations = NULL;
 static OutboundProtocolRegistration *outboundProtocolRegistrations = NULL;
@@ -17,10 +17,13 @@ static const uint8_t LAN_EXECUTION_PREFIX_BYTES[] ={
 };
 static const int SIZE_LAN_EXECUTION_PREFIX_BYTES = sizeof(LAN_EXECUTION_PREFIX_BYTES);
 
-static const uint8_t LAN_ANSWER_PREFIX_BYTES[] = {
+static const uint8_t LAN_ERROR_PREFIX_BYTES[] = {
 	0xff, 0xf8, 0x00, 0x07, 0x02, 0x00
 };
-static const int SIZE_LAN_ANSWER_PREFIX_BYTES = sizeof(LAN_ANSWER_PREFIX_BYTES);
+static const uint8_t LAN_RESPONSE_PREFIX_BYTES[] ={
+	0xff, 0xf8, 0x00, 0x07, 0x01, 0x00
+};
+static const int SIZE_LAN_ANSWER_PREFIX_BYTES = sizeof(LAN_ERROR_PREFIX_BYTES);
 
 void copyProtocolDescription(ProtocolDescription *dest, ProtocolDescription *src) {
 	dest->mnemomic = src->mnemomic;
@@ -1035,6 +1038,9 @@ bool isLanAnswer(ProtocolData *pData) {
 	if(!isValidProtocolData(pData))
 		return false;
 
+	if (pData->dataSize < MIN_SIZE_LAN_RESPONSE_DATA)
+		return false;
+
 	return pData->data[1] == 0xf8 &&
 		pData->data[2] == 0x00 &&
 		pData->data[3] == 0x07;
@@ -1065,73 +1071,173 @@ bool isLanExecution(ProtocolData *pData) {
 		pData->data[3] == 0x05;
 }
 
-int parseLanAnswer(ProtocolData *pData, LanAnswer *lanAnswer) {
-	return -1;
+int parseLanAnswer(ProtocolData *pData, LanAnswer *answer) {
+	if (!isLanAnswer(pData))
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	int position = SIZE_LAN_ANSWER_PREFIX_BYTES;
+	if (pData->data[position] != 0x06)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	position++;
+	if(pData->data[position] != FLAG_BYTES_TYPE)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	position++;
+	int traceIdEndPosition = -1;
+	for (int i = position; i < pData->dataSize; i++) {
+		if (pData->data[i] == FLAG_UNIT_SPLITTER || pData->data[i] == FLAG_DOC_BEGINNING_END) {
+			traceIdEndPosition = i;
+			break;
+		}
+	}
+
+	if (traceIdEndPosition == -1)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	ProtocolData traceId;
+	if (unescape(pData->data + position, traceIdEndPosition - position, &traceId) != 0)
+		return TACP_ERROR_FAILED_TO_UNESCAPE;
+
+	if (traceId.dataSize != SIZE_THINGS_TINY_ID)
+		return TACP_ERROR_FAILED_TO_UNESCAPE;
+
+	memcpy(answer->traceId, traceId.data, SIZE_THINGS_TINY_ID);
+
+	if (isResponseTinyId(answer->traceId)) {
+		if (pData->data[traceIdEndPosition] != FLAG_DOC_BEGINNING_END)
+			return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+		answer->errorNumber = 0;
+
+		return 0;
+	}
+
+	if(!isErrorTinyId(answer->traceId))
+		return TACP_ERROR_UNKNOWN_ANSWER_TINY_ID_TYPE;
+
+	position = traceIdEndPosition;
+	if(pData->data[position] != FLAG_UNIT_SPLITTER)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	if (position + 1 + 1 + 1 + 1 > (pData->dataSize - 1))
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	position++;
+	if (pData->data[position] != 0x08)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	position++;
+	if(pData->data[position] != FLAG_BYTE_TYPE)
+		return TACP_ERROR_MALFORMED_PROTOCOL_DATA;
+
+	position++;
+	if (pData->data[position] == FLAG_ESCAPE) {
+		answer->errorNumber = pData->data[position + 1];
+	} else {
+		answer->errorNumber = pData->data[position];
+	}
+
+	return 0;
+}
+
+int translateLanResonse(LanAnswer *answer, ProtocolData *pData, ProtocolData *escapedTraceId) {
+	uint8_t buff[MAX_SIZE_PROTOCOL_DATA];
+
+	int position = 0;
+	buff[position] = 0xff;
+	memcpy(buff + 1, LAN_RESPONSE_PREFIX_BYTES, SIZE_LAN_ANSWER_PREFIX_BYTES);
+	position += SIZE_LAN_ANSWER_PREFIX_BYTES;
+
+	buff[position] = 0x06;
+	position++;
+
+	buff[position] = FLAG_BYTES_TYPE;
+	position++;
+	memcpy(buff + position, escapedTraceId->data, escapedTraceId->dataSize);
+	position += escapedTraceId->dataSize;
+
+	buff[position] = 0xff;
+
+	pData->data = malloc(sizeof(uint8_t) * position);
+	if(!pData->data)
+		return TACP_ERROR_OUT_OF_MEMEORY;
+
+	memcpy(pData->data, buff, position);
+	pData->dataSize = position;
+
+	return 0;
+}
+
+int translateLanError(LanAnswer *answer, ProtocolData *pData, ProtocolData *escapedTraceId) {
+	uint8_t buff[MAX_SIZE_PROTOCOL_DATA];
+
+	int position = 0;
+	memcpy(buff, LAN_ERROR_PREFIX_BYTES, SIZE_LAN_ANSWER_PREFIX_BYTES);
+	position += SIZE_LAN_ANSWER_PREFIX_BYTES;
+
+	buff[position] = 0x06;
+	position++;
+
+	buff[position] = FLAG_BYTES_TYPE;
+	position++;
+	memcpy(buff + position, escapedTraceId->data, escapedTraceId->dataSize);
+	position += escapedTraceId->dataSize;
+
+	buff[position] = FLAG_UNIT_SPLITTER;
+	position++;
+
+	buff[position] = 0x08;
+	position++;
+
+	buff[position] = FLAG_BYTE_TYPE;
+	position++;
+
+	if (isEscapedByte(answer->errorNumber)) {
+		buff[position] = FLAG_ESCAPE;
+		buff[position] = answer->errorNumber;
+		position += 2;
+	} else {
+		buff[position] = answer->errorNumber;
+		position++;
+	}
+	buff[position] = 0xff;
+
+	int dataSize = position + 1;
+	pData->data = malloc(sizeof(uint8_t) * dataSize);
+	if(!pData->data)
+		return TACP_ERROR_OUT_OF_MEMEORY;
+
+	memcpy(pData->data, buff, dataSize);
+	pData->dataSize = dataSize;
+
+	return 0;
 }
 
 int translateLanAnswer(LanAnswer *answer, ProtocolData *pData) {
+	ProtocolData escapedTraceId = {NULL, 0};
+	if (escape(answer->traceId, SIZE_THINGS_TINY_ID, &escapedTraceId) != 0) {
+		releaseProtocolData(&escapedTraceId);
+		return TACP_ERROR_FAILED_TO_ESCAPE;
+	}
+
+	int result;
 	if (isResponseTinyId(answer->traceId)) {
-		uint8_t buff[SIZE_LAN_RESPONSE_DATA];
-
-		int position = 0;
-		buff[position] = 0xff;
-		memcpy(buff + 1, LAN_ANSWER_PREFIX_BYTES, sizeof(LAN_ANSWER_PREFIX_BYTES));
-		position += SIZE_LAN_ANSWER_PREFIX_BYTES;
-
-		buff[position] = 0x06;
-		position++;
-		
-		buff[position] = FLAG_BYTES_TYPE;
-		position++;
-		memcpy(buff + position, answer->traceId, SIZE_THINGS_TINY_ID);
-		position += SIZE_THINGS_TINY_ID;
-
-		buff[position] = 0xff;
-
-		pData->data = malloc(sizeof(uint8_t) * SIZE_LAN_RESPONSE_DATA);
-		if (!pData->data)
-			return TACP_ERROR_OUT_OF_MEMEORY;
-
-		memcpy(pData->data, buff, SIZE_LAN_RESPONSE_DATA);
-		pData->dataSize = SIZE_LAN_RESPONSE_DATA;
-
-		return 0;
+		result = translateLanResonse(answer, pData, &escapedTraceId);
 	} else if (isErrorTinyId(answer->traceId)) {
-		uint8_t buff[SIZE_LAN_ERROR_DATA];
-
-		int position = 0;
-		memcpy(buff, LAN_ANSWER_PREFIX_BYTES, sizeof(LAN_ANSWER_PREFIX_BYTES));
-		position += SIZE_LAN_ANSWER_PREFIX_BYTES;
-
-		buff[position] = 0x06;
-		position++;
-
-		buff[position] = FLAG_BYTES_TYPE;
-		position++;
-		memcpy(buff + position, answer->traceId, SIZE_THINGS_TINY_ID);
-		position += SIZE_THINGS_TINY_ID;
-
-		buff[position] = 0x08;
-		position++;
-
-		buff[position] = FLAG_BYTE_TYPE;
-		position++;
-		buff[position] = answer->errorNumber;
-		position++;
-
-		buff[position] = 0xff;
-
-		pData->data = malloc(sizeof(uint8_t) * SIZE_LAN_ERROR_DATA);
-		if(!pData->data)
-			return TACP_ERROR_OUT_OF_MEMEORY;
-
-		memcpy(pData->data, buff, SIZE_LAN_ERROR_DATA);
-		pData->dataSize = SIZE_LAN_ERROR_DATA;
-
-		return 0;
+		result = translateLanError(answer, pData, &escapedTraceId);
 	} else {
+		releaseProtocolData(&escapedTraceId);
 		return TACP_ERROR_UNKNOWN_ANSWER_TINY_ID_TYPE;
 	}
+
+	releaseProtocolData(&escapedTraceId);
+	if (result != 0) {
+		releaseProtocolData(pData);
+		return TACP_ERROR_FAILED_TO_TRANSLATE_ANSWER;
+	}
+
+	return 0;
 }
 
 int parseLanExecution(ProtocolData *pData, TinyId requestId, Protocol *action) {
