@@ -22,7 +22,7 @@ typedef struct ProtocolAttributeDescription {
 } ProtocolAttributeDescription;
 
 typedef struct ProtocolName {
-	uint8_t namespace[2];
+	uint8_t ns[2];
 	uint8_t localName;
 } ProtocolName;
 

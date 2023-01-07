@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "debug.h"
 #include "tacp.h"
 
 #define MIN_SIZE_PROTOCOL_DATA 2 + 5
@@ -177,7 +178,7 @@ ProtocolDescription createProtocolDescription(uint8_t mnemonic, ProtocolName nam
 	ProtocolDescription pd = {
 		mnemonic,
 		{
-			{name.namespace[0], name.namespace[1]},
+			{name.ns[0], name.ns[1]},
 			name.localName
 		},
 		NULL,
@@ -456,8 +457,8 @@ bool isInboundProtocol(ProtocolData *pData, uint8_t mnemonic) {
 	if (!getInboundProtocolNameByMnemonic(mnemonic, &name))
 		return false;
 
-	return pData->data[1] == name.namespace[0] &&
-		pData->data[2] == name.namespace[1] &&
+	return pData->data[1] == name.ns[0] &&
+		pData->data[2] == name.ns[1] &&
 		pData->data[3] == name.localName;
 }
 
@@ -483,8 +484,8 @@ ProtocolDescription *getInboundProtocolDescriptionByName(ProtocolName name) {
 InboundProtocolRegistration *getInboundProtocolRegistrationByName(ProtocolName name) {
 	InboundProtocolRegistration *current = inboundProtocolRegistrations;
 	while(current) {
-		if(current->description.name.namespace[0] == name.namespace[0] &&
-			current->description.name.namespace[1] == name.namespace[1] &&
+		if(current->description.name.ns[0] == name.ns[0] &&
+			current->description.name.ns[1] == name.ns[1] &&
 			current->description.name.localName == name.localName) {
 
 			return current;
@@ -793,8 +794,8 @@ int translateProtocol(Protocol *protocol, ProtocolData *pData) {
 
 	uint8_t buff[MAX_SIZE_PROTOCOL_DATA];
 	buff[0] = 0xff;
-	buff[1] = description->name.namespace[0];
-	buff[2] = description->name.namespace[1];
+	buff[1] = description->name.ns[0];
+	buff[2] = description->name.ns[1];
 	buff[3] = description->name.localName;
 
 	int attributesSize = getAttributesSize(protocol);

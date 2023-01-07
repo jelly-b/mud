@@ -14,8 +14,6 @@
 #define TINY_ID_ERROR_INVALID_MILLISECONDS -6
 #define TINY_ID_ERROR_NOT_ANSWER_MESSAGE_TYPE -7
 
-#define MAX_VALUE_PASSED_TIME_THIS_DAY 23 * (60 * 60 * 1000) + 23 * (60 * 1000) + 59 * 1000 + 999
-
 typedef uint8_t TinyId[SIZE_THINGS_TINY_ID];
 
 typedef enum MessageType {

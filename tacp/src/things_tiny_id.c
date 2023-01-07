@@ -1,6 +1,10 @@
 #include <stdlib.h>
+#include <stdio.h>
 
+#include "debug.h"
 #include "things_tiny_id.h"
+
+static const uint32_t MAX_VALUE_PASSED_TIME_THIS_DAY = 86399999;
 
 int createTinyIdModel(uint8_t lanId, MessageType messageType,
 		uint32_t passedTimeThisDay, ThingsTinyIdModel *model) {
@@ -15,11 +19,11 @@ int createTinyIdModel(uint8_t lanId, MessageType messageType,
 
 	uint32_t remainedTime = passedTimeThisDay;
 
-	uint32_t aHour = 60 * 60 * 1000;
+	uint32_t aHour = 3600000;
 	model->hours = remainedTime / aHour;
 	remainedTime = remainedTime % aHour;
 
-	uint32_t aMinute = 60 * 1000;
+	uint32_t aMinute = 60000;
 	model->minutes = remainedTime / aMinute;
 	remainedTime = remainedTime % aMinute;
 

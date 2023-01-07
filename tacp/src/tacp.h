@@ -120,5 +120,6 @@ int parseLanExecution(ProtocolData *pData, TinyId requestId, Protocol *action);
 int parseProtocol(ProtocolData *pData, Protocol *protocol);
 int translateLanNotification(Protocol *event, uint8_t *data);
 InboundProtocolRegistration *getInboundProtocolRegistrationByName(ProtocolName name);
+bool getInboundProtocolNameByMnemonic(uint8_t mnemonic, ProtocolName *name);
 
 #endif

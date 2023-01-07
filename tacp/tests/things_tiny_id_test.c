@@ -6,7 +6,7 @@ void setUp() {}
 
 void tearDown() {}
 
-void testThingsTinyId(void) {
+void testThingsTinyId() {
 	uint8_t lanId = 24;
 	uint8_t hours = 11;
 	uint8_t minutes = 23;
@@ -52,10 +52,17 @@ void testThingsTinyId(void) {
 	TEST_ASSERT_EQUAL_UINT(ERROR, errorModel.messageType);
 }
 
+void testInvalidPassedTimeTinyId() {
+	TinyId requestId = {0};
+	if(makeTinyId(0x01, REQUEST, 215001, requestId) != 0)
+		TEST_FAIL_MESSAGE("Failed to create things tiny ID.");
+}
+
 int main() {
 	UNITY_BEGIN();
 	
 	RUN_TEST(testThingsTinyId);
+	RUN_TEST(testInvalidPassedTimeTinyId);
 	
 	return UNITY_END();
 }
